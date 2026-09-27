@@ -1,0 +1,30 @@
+# Core ML / Deep Learning
+torch
+torchvision
+
+# Data / Numerical Analysis
+numpy
+pandas
+
+# Visualization
+matplotlib
+
+# Image Processing
+Pillow==12.3.0
+
+# Dataset Utilities
+tinyimagenet
+datadings
+
+# Progress Bars / Notebook Support
+tqdm
+ipywidgets
+ipykernel
+jupyter
+
+# EDA / Statistics
+scikit-learn
+scipy
+
+# Optional utilities useful for later EDA
+imagehash

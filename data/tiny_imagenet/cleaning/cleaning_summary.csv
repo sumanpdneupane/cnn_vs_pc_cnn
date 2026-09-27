@@ -1,0 +1,4 @@
+Dataset,Split,Original Images,Clean Images,Net Change
+tiny_imagenet,Train,100000,99953,-47
+tiny_imagenet,Validation,10000,9993,-7
+tiny_imagenet,Test,10000,9988,-12

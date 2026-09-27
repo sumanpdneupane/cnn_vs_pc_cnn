@@ -1,0 +1,4 @@
+Dataset,Split,Images,Classes,Duplicate Groups
+tiny_imagenet,Train,99953,200,0
+tiny_imagenet,Validation,9993,200,0
+tiny_imagenet,Test,9988,N/A,0

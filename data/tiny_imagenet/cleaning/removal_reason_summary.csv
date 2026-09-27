@@ -1,0 +1,4 @@
+Dataset,Reason,Removed Images
+tiny_imagenet,Cross-Split Leakage,10
+tiny_imagenet,Label Conflict,54
+tiny_imagenet,Within-Split Duplicate,2

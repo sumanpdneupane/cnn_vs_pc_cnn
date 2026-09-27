@@ -1,0 +1,2 @@
+Dataset,Original Images,Clean Images,Removed Images,Manifest Entries,Audit Status
+tiny_imagenet,120000,119934,66,66,Passed
