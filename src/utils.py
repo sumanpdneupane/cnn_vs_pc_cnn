@@ -1,7 +1,7 @@
 import numpy as np
 import torch
 from matplotlib import pyplot as plt
-from src.dataset.tiny_imagenet_dataset_2 import means, stds
+from src.dataset.tiny_imagenet_dataset_450train_100val import means, stds
 
 def show_image(images, labels, num_show, class_name, name="", has_norm=True):
     MEAN_T = torch.tensor(means).view(3, 1, 1)
