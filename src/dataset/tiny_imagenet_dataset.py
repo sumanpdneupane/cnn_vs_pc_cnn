@@ -4,7 +4,7 @@ import torch
 from matplotlib import pyplot as plt
 from torchvision import transforms
 from tinyimagenet import TinyImageNet
-from src.dataset._loader import ImageNetLoader
+from archive.dataset._loader import ImageNetLoader
 
 TINY_ROOT = Path("./data/tiny_imagenet")
 

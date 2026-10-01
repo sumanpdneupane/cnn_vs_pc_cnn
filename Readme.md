@@ -2,10 +2,21 @@
 pip install --upgrade pip
 pip install -r requirements.txt
 ```
+https://github.com/meet-minimalist/TinyImageNet-Benchmarks
+/kaggle/input/datasets/sumanprasadneupane/tiny-imagenet-200-450train-100val
 
-# ImageNet-21K = 1,31,50,000 (1 crore 31 lakh 50 thousand), classes= 19,167, imbalanced
-# ImageNet-21K-P = 1,15,82,723 (1 crore 15 lakh 82 thousand 7 hundred 23), classes= 10,450, balanced
+```CNN
+Under our experimental setup, the proposed 8Conv Standard CNN achieved 
+60.74% Top-1 validation accuracy, which is numerically higher than 
+the results reported in the TinyImageNet-Benchmarks repository; 
+however, direct performance superiority cannot be claimed because 
+the data split and training protocols differ.
 
+Despite using a conventional feed-forward CNN architecture without 
+residual connections or pretrained weights, the Standard CNN 
+achieved 60.74% Top-1 validation accuracy on the study's 
+Tiny ImageNet-200 split.
+```
 
 # https://github.com/Alibaba-MIIL/ImageNet21K/blob/main/dataset_preprocessing/processing_instructions.md
 # https://huggingface.co/datasets/timm/imagenet-w21-p
@@ -27,32 +38,6 @@ updates its backbone weights using local learning rules. The resulting higher-le
 representation is then used for image classification.
 ```
 
-SEEDS = [42, 123, 2024, 3407, 777]
-
-https://www.leoniemonigatti.com/blog/pytorch-image-classification.html
-1. CE-only StandardCNN cnn_1, cnn_4
-   Best Val Acc = 78.00%
-   Feature separation, 
-    Mean Intra-Class Distance : 2.258936
-    Mean Inter-Class Distance : 3.173573
-    Inter / Intra Ratio       : 1.404898
-
-2. CE + Center Loss cnn_2, cnn_5
-   Best Val Acc = 76.80%
-   Feature separation, 
-   Mean Intra-Class Distance = 1.604844
-   Mean Inter-Class Distance = 2.363687
-   Inter / Intra Ratio       = 1.472845
-
-3. CE + SupCon cnn_3
-   Best Val Acc = 78.90%
-   Not built yet
-   Not trained yet
-
-
-Spatial pooling 4×4 + Linear + bias=False
-Spatial pooling 7×7 + Linear + bias=False
-Spatial pooling 7×7 + Linear + bias=True
 A hierarchical convolutional adaptation of Rao-style predictive coding with mini-batch local learning.
 
 # Test
