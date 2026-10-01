@@ -1,44 +1,14 @@
 import random
 from pathlib import Path
-
 import numpy as np
-import torch
-from torch.utils.data import Dataset
-from matplotlib import pyplot as plt
-from torchvision import transforms
 from PIL import Image
+from torch.utils.data import Dataset
+from torchvision import transforms
 
 TINY_ROOT = Path("./data/tiny_imagenet/tiny-imagenet-200-450train-100val")
 
 means = [0.4803270399570465, 0.44804883003234863, 0.3975021243095398]
 stds = [0.27645865082740784, 0.26883983612060547, 0.28148162364959717]
-
-
-def show_image(images, labels, num_show, class_name, name="", has_norm=True):
-    MEAN_T = torch.tensor(means).view(3, 1, 1)
-    STD_T = torch.tensor(stds).view(3, 1, 1)
-
-    def denormalize(image):
-        image = image.cpu()
-        if has_norm:
-            image = image * STD_T + MEAN_T
-        return image.clamp(0, 1)
-
-    plt.figure(figsize=(16, 10))
-
-    for i in range(min(num_show, len(images))):
-        image = denormalize(images[i])
-        image = image.permute(1, 2, 0).numpy()
-
-        plt.subplot(4, 5, i + 1)
-        plt.imshow(image)
-        plt.title(class_name[int(labels[i])], fontsize=9)
-        plt.axis("off")
-
-    plt.suptitle(name, fontsize=18, fontweight="bold")
-    plt.tight_layout(rect=[0, 0, 1, 0.96])
-    plt.show()
-
 
 def get_tiny_imagenet_class_names(dataset, tiny_root=TINY_ROOT):
     tiny_root = Path(tiny_root)
@@ -70,31 +40,6 @@ def convert_to_rgb(image):
     return image.convert("RGB")
 
 
-from torchvision import transforms
-
-# train_transform = transforms.Compose([
-#     transforms.Lambda(convert_to_rgb),
-#
-#     # 1. Geometry & Spatial Heavy Augmentation
-#     transforms.RandomResizedCrop(64, scale=(0.5, 1.0), ratio=(0.75, 1.33)),
-#     transforms.RandomHorizontalFlip(p=0.5),
-#     transforms.RandomVerticalFlip(p=0.3),  # Use if orientation doesn't matter (e.g., satellite/cells)
-#     transforms.RandomRotation(degrees=(-30, 30)),
-#
-#     # 2. Automated Auto-Augment (Tuned Up)
-#     # Increased magnitude (max is 30) and ops for heavier variety
-#     transforms.RandAugment(num_ops=4, magnitude=15),
-#
-#     # 3. Explicit Color Distortion
-#     transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
-#
-#     # 4. Mandatory Conversions
-#     transforms.ToTensor(),
-#     transforms.Normalize(mean=means, std=stds),
-#
-#     # 5. Pixel-Level Masking (Must be after ToTensor)
-#     transforms.RandomErasing(p=0.4, scale=(0.02, 0.25), value='random'),
-# ])
 
 train_transform = transforms.Compose([
     transforms.Lambda(convert_to_rgb),
@@ -110,24 +55,6 @@ test_transform = transforms.Compose([
     transforms.ToTensor(),
     transforms.Normalize(mean=means, std=stds)
 ])
-
-class RandomRGBShift:
-    """Apply a small, independent random shift to each RGB channel."""
-
-    def __init__(self, shift=10):
-        self.shift = shift
-
-    def __call__(self, image):
-        image = np.asarray(image, dtype=np.int16)
-
-        shifts = np.array(
-            [random.randint(-self.shift, self.shift) for _ in range(3)],
-            dtype=np.int16
-        )
-
-        image = np.clip(image + shifts, 0, 255).astype(np.uint8)
-        return Image.fromarray(image, mode="RGB")
-
 
 class TinyImageNetDataset(Dataset):
     def __init__(self, root, split="train", transform=None):

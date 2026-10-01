@@ -1,98 +1,77 @@
-import os
-
+import numpy as np
 import torch
+from matplotlib import pyplot as plt
+from src.dataset.tiny_imagenet_dataset_2 import means, stds
+
+def show_image(images, labels, num_show, class_name, name="", has_norm=True):
+    MEAN_T = torch.tensor(means).view(3, 1, 1)
+    STD_T = torch.tensor(stds).view(3, 1, 1)
+    plt.figure(figsize=(16, 10))
+    for i in range(min(num_show, len(images))):
+        image = images[i].cpu()
+        if has_norm:
+            image = image * STD_T + MEAN_T
+        image = image.permute(1, 2, 0).numpy()
+        plt.subplot(4, 5, i + 1)
+        plt.imshow(image)
+        plt.title(class_name[int(labels[i])], fontsize=9)
+        plt.axis("off")
+    plt.suptitle(name, fontsize=18, fontweight="bold")
+    plt.tight_layout(rect=[0, 0, 1, 0.96])
+    plt.show()
+
+def show_mixed_images(images, labels_a, labels_b, lam, class_names, num_show, name="Mixed Images", has_norm=True):
+    MEAN_T = torch.tensor(means).view(3, 1, 1)
+    STD_T = torch.tensor(stds).view(3, 1, 1)
+    images = images.detach().cpu()
+    labels_a = labels_a.detach().cpu()
+    labels_b = labels_b.detach().cpu()
+    plt.figure(figsize=(15, 4))
+    for i in range(min(num_show, len(images))):
+        image = images[i]
+        if has_norm:
+            image = image * STD_T + MEAN_T
+        image = image.clamp(0, 1).permute(1, 2, 0).numpy()
+        plt.subplot(1, num_show, i + 1)
+        plt.imshow(image)
+        plt.title(f"{class_names[labels_a[i].item()]}\n+\n{class_names[labels_b[i].item()]}\nλ={lam:.2f}", fontsize=9)
+        plt.axis("off")
+    plt.suptitle(name, fontsize=14)
+    plt.tight_layout()
+    plt.show()
 
 
-# Hidden Layers: ReLU
-# Output Layer: Softmax: Multi-Class Classification: probability distribution
-# Input Image → Conv Layer → ReLU → Pooling → Conv Layer → ReLU → Flatten → Fully Connected → Softmax / Sigmoid (Output).
+def apply_mixup(images, labels, alpha=0.2):
+    batch_size = images.size(0)
+    perm = torch.randperm(batch_size, device='cpu').to('cpu')
+    lam = float(np.random.beta(alpha, alpha))
+    mixed_images = lam * images + (1.0 - lam) * images[perm]
+    labels_a = labels
+    labels_b = labels[perm]
+    return (mixed_images, labels_a, labels_b, lam, 'MixUp')
 
+def apply_cutmix(images, labels, alpha=1.0):
+    batch_size, _, height, width = images.shape
+    perm = torch.randperm(batch_size, device='cpu').to('cpu')
+    lam = float(np.random.beta(alpha, alpha))
+    cut_ratio = np.sqrt(1.0 - lam)
+    cut_w = int(width * cut_ratio)
+    cut_h = int(height * cut_ratio)
+    cx = int(np.random.randint(0, width))
+    cy = int(np.random.randint(0, height))
+    x1 = max(cx - cut_w // 2, 0)
+    x2 = min(cx + cut_w // 2, width)
+    y1 = max(cy - cut_h // 2, 0)
+    y2 = min(cy + cut_h // 2, height)
+    mixed_images = images.clone()
+    mixed_images[:, :, y1:y2, x1:x2] = images[perm, :, y1:y2, x1:x2]
+    patch_area = (x2 - x1) * (y2 - y1)
+    lam_adjusted = 1.0 - patch_area / float(width * height)
+    labels_a = labels
+    labels_b = labels[perm]
+    return (mixed_images, labels_a, labels_b, lam_adjusted, 'CutMix')
 
-# ============================================================
-# ACTIVATION FUNCTIONS
-# ============================================================
-
-class ActivationFunction:
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
-
-    def derivative(self, x: torch.Tensor) -> torch.Tensor:
-        raise NotImplementedError
-
-
-class LinearActivation(ActivationFunction):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return x
-
-    def derivative(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.ones_like(x)
-
-
-class ReLUActivation(ActivationFunction):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        return torch.relu(x)
-
-    def derivative(self, x: torch.Tensor) -> torch.Tensor:
-        return (x > 0).to(x.dtype)
-
-
-class Softmax(ActivationFunction):
-    def forward(self, x: torch.Tensor) -> torch.Tensor:
-        x = x - torch.max(x, dim=-1, keepdim=True).values
-        exp_x = torch.exp(x)
-        return exp_x / torch.sum(exp_x, dim=-1, keepdim=True)
-
-
-    def derivative(self, x: torch.Tensor) -> torch.Tensor:
-        probabilities = self.forward(x)
-        diagonal = torch.diag_embed(probabilities)
-        outer_product = probabilities.unsqueeze(-1) * probabilities.unsqueeze(-2)
-        return diagonal - outer_product
-
-# ============================================================
-# REPRODUCIBILITY
-# ============================================================
-
-def set_seed(seed=42):
-    torch.manual_seed(seed)
-
-    if torch.cuda.is_available():
-        torch.cuda.manual_seed_all(seed)
-
-    if hasattr(torch, "mps") and torch.backends.mps.is_available():
-        torch.mps.manual_seed(seed)
-
-def save_pccnn_model(model, file_path, epochs=None, history=None):
-    torch.save({
-        "model_state_dict": model.state_dict(),
-        "alpha1": model.alpha1,
-        "alpha2": model.alpha2,
-        "lambda_u": model.lambda_u,
-        "inference_steps": model.inference_steps,
-        "representation_update_rate": model.representation_update_rate,
-        "weight_learning_rate": model.weight_learning_rate,
-        "epochs": epochs,
-        "history": history,
-    }, file_path)
-
-    print(f"Model saved: {file_path}")
-
-def load_pccnn_model(model, file_path, device):
-    if not os.path.exists(file_path):
-        print(f"File not found: {file_path}")
-        return model, 0
-
-    checkpoint = torch.load(file_path, map_location=device)
-
-    model.load_state_dict(checkpoint["model_state_dict"])
-
-    model.alpha1 = checkpoint["alpha1"]
-    model.alpha2 = checkpoint["alpha2"]
-    model.lambda_u = checkpoint["lambda_u"]
-    model.inference_steps = checkpoint["inference_steps"]
-    model.representation_update_rate = checkpoint["representation_update_rate"]
-    model.weight_learning_rate = checkpoint["weight_learning_rate"]
-
-    print(f"Model loaded: {file_path}")
-
-    return model, checkpoint
+def apply_mixup_or_cutmix(images, labels, mixup_prob=0.5, mixup_alpha=1.0, cutmix_prob=0.5):
+    if np.random.random() < mixup_prob:
+        return apply_mixup(images, labels, alpha=mixup_alpha)
+    return apply_cutmix(images, labels, alpha=cutmix_prob)

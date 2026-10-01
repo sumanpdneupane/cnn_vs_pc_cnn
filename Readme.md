@@ -5,6 +5,13 @@ pip install -r requirements.txt
 https://github.com/meet-minimalist/TinyImageNet-Benchmarks
 /kaggle/input/datasets/sumanprasadneupane/tiny-imagenet-200-450train-100val
 
+```
+We first established a strong conventional CNN baseline through systematic 
+architectural and training experiments, and then evaluated whether 
+predictive-coding computation provides additional robustness under 
+controlled noise conditions.
+```
+
 ```CNN
 Under our experimental setup, the proposed 8Conv Standard CNN achieved 
 60.74% Top-1 validation accuracy, which is numerically higher than 
@@ -17,10 +24,12 @@ residual connections or pretrained weights, the Standard CNN
 achieved 60.74% Top-1 validation accuracy on the study's 
 Tiny ImageNet-200 split.
 ```
+```
+https://github.com/Alibaba-MIIL/ImageNet21K/blob/main/dataset_preprocessing/processing_instructions.md
+https://huggingface.co/datasets/timm/imagenet-w21-p
+https://huggingface.co/datasets/gmongaras/Imagenet21K
+```
 
-# https://github.com/Alibaba-MIIL/ImageNet21K/blob/main/dataset_preprocessing/processing_instructions.md
-# https://huggingface.co/datasets/timm/imagenet-w21-p
-# https://huggingface.co/datasets/gmongaras/Imagenet21K
 
 ```
 This:
