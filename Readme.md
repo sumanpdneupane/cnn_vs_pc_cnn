@@ -21,9 +21,25 @@ pip install -r requirements.txt
 
 `src/model/cnn.py`. The baseline, trained with backprop.
 
-- 8 conv layers (3×3, 2 per block: 32-64 · 64-128 · 128-256 · 256-512), each conv → BatchNorm → LeakyReLU (0.05).
-- Max-pool after blocks 1–3; conv8 dilation 2. Dropout2d 0.15 (block 3), 0.25 (block 4).
-- Global average pooling → dense 512 (BN, LeakyReLU, dropout 0.35) → classifier. 2.71M parameters (200 classes).
+Each conv: 3×3, no bias → BatchNorm → LeakyReLU (0.05). Input 3×64×64.
+
+| Block | Layer | Output shape | Receptive field | Parameters |
+|---|---|---|---|---|
+| level1 | conv1 | 32×64×64 | 3 | 928 |
+| | conv2 + max-pool | 64×32×32 | 6 | 18,560 |
+| level2 | conv3 | 64×32×32 | 10 | 36,992 |
+| | conv4 + max-pool | 128×16×16 | 16 | 73,984 |
+| level3 | conv5 | 128×16×16 | 24 | 147,712 |
+| | conv6 + max-pool + Dropout2d 0.15 | 256×8×8 | 36 | 295,424 |
+| level4 | conv7 | 256×8×8 | 52 | 590,336 |
+| | conv8 (dilation 2) + Dropout2d 0.25 | 512×8×8 | 84 | 1,180,672 |
+| head | global average pooling | 512 | whole image | 0 |
+| | dense 512 (BN, LeakyReLU, dropout 0.35) | 512 | | 263,168 |
+| | classifier | 200 | | 102,600 |
+| | **Total** | | | **2,710,376** |
+
+Parameters include the BatchNorm γ, β. Receptive field in input pixels.
+
 - Training: SGD (Nesterov, momentum 0.9, lr 0.05, weight decay 1e-4), cosine schedule, label smoothing 0.1, batch 64, 100 epochs.
 
 | Used for | Paper |
@@ -48,19 +64,24 @@ pip install -r requirements.txt
 - Tied weights: the prediction uses the transposed conv of the same layer. Update rates learned per channel.
 - **Per conv, not per block:** each of the 8 convs has its own top-down prediction (`conv_transpose2d` with that conv's weight). Unpool to the max-pool winners only after conv2, 4, 6.
 
-| Block | Conv | Bottom-up (conv) | Top-down (transposed conv, same weight) |
-|---|---|---|---|
-| level1 | conv1 | image → r1 (32×64×64) | r1 → image |
-| | conv2 + pool | r1 → r2 (64×32×32) | r2 → unpool → r1 |
-| level2 | conv3 | r2 → r3 (64×32×32) | r3 → r2 |
-| | conv4 + pool | r3 → r4 (128×16×16) | r4 → unpool → r3 |
-| level3 | conv5 | r4 → r5 (128×16×16) | r5 → r4 |
-| | conv6 + pool | r5 → r6 (256×8×8) | r6 → unpool → r5 |
-| level4 | conv7 | r6 → r7 (256×8×8) | r7 → r6 |
-| | conv8 (dilation 2) | r7 → r8 (512×8×8) | r8 → r7 |
+| Block | Conv | Bottom-up (conv) | Top-down (transposed conv, same weight) | Extra: rate a | Extra: rate b |
+|---|---|---|---|---|---|
+| level1 | conv1 | image → r1 (32×64×64) | r1 → image | 32 | 32 |
+| | conv2 + pool | r1 → r2 (64×32×32) | r2 → unpool → r1 | 64 | 64 |
+| level2 | conv3 | r2 → r3 (64×32×32) | r3 → r2 | 64 | 64 |
+| | conv4 + pool | r3 → r4 (128×16×16) | r4 → unpool → r3 | 128 | 128 |
+| level3 | conv5 | r4 → r5 (128×16×16) | r5 → r4 | 128 | 128 |
+| | conv6 + pool | r5 → r6 (256×8×8) | r6 → unpool → r5 | 256 | 256 |
+| level4 | conv7 | r6 → r7 (256×8×8) | r7 → r6 | 256 | 256 |
+| | conv8 (dilation 2) | r7 → r8 (512×8×8) | r8 → r7 | 512 | – (top layer) |
+| | | | | **1,440** | **928** |
 
-- All weights learned by backprop through the cycles. Hidden dropout uses one mask for all cycles.
-- 2,368 extra parameters (the rates).
+**Extra compared with the Standard CNN**
+- **Parameters:** only the rates, 2,368 (a = bottom-up step per channel of r1..r8, b = top-down step per channel of r1..r7). Total 2,712,744.
+- **Top-down predictions:** no new weights (the transposed conv of the same conv).
+- **Not learned (buffers):** λ per layer (top eigenvalue of WWᵀ, sets the step a/λ) and its 8 power-iteration vectors.
+- **Compute:** 7 inference steps (cycles) after the feedforward pass, in training and at test. Each step = one top-down + one bottom-up sweep through all 8 convs.
+- **Training:** the same loss, optimizer and schedule; backprop runs through all cycles. Hidden dropout uses one mask for all cycles.
 
 | Used for | Paper |
 |---|---|
