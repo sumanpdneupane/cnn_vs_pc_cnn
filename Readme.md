@@ -1,180 +1,69 @@
+# Standard CNN vs Predictive-Coding CNN
+
 ```commandline
-pip install --upgrade pip
 pip install -r requirements.txt
 ```
-https://github.com/meet-minimalist/TinyImageNet-Benchmarks
-/kaggle/input/datasets/sumanprasadneupane/tiny-imagenet-200-450train-100val
 
-```
-We first established a strong conventional CNN baseline through systematic 
-architectural and training experiments, and then evaluated whether 
-predictive-coding computation provides additional robustness under 
-controlled noise conditions.
-```
+## Data
 
-```CNN
-Under our experimental setup, the proposed 8Conv Standard CNN achieved 
-60.74% Top-1 validation accuracy, which is numerically higher than 
-the results reported in the TinyImageNet-Benchmarks repository; 
-however, direct performance superiority cannot be claimed because 
-the data split and training protocols differ.
+- **Tiny ImageNet** (200 classes, 64×64, 500 train + 50 val images per class), in `data/tiny_imagenet/tiny-imagenet-200` (val images sorted into one folder per class).
+- Experiments: all 200 classes in `experiments_in_seeds/` (checkpoints in `checkpoints/`). 10-class test runs: `archive/_03_experiments_10_classes/`.
+- Normalisation: mean/std of the Tiny ImageNet training set. Training augmentation: random crop (pad 4) + horizontal flip → ResizeMix on 50% of images → RandAugment (2 ops, magnitude 5). Validation: clean images.
+- Code: `src/dataset/`.
 
-Despite using a conventional feed-forward CNN architecture without 
-residual connections or pretrained weights, the Standard CNN 
-achieved 60.74% Top-1 validation accuracy on the study's 
-Tiny ImageNet-200 split.
-```
-```
-https://github.com/Alibaba-MIIL/ImageNet21K/blob/main/dataset_preprocessing/processing_instructions.md
-https://huggingface.co/datasets/timm/imagenet-w21-p
-https://huggingface.co/datasets/gmongaras/Imagenet21K
-```
+| Used for | Paper |
+|---|---|
+| Dataset | Le & Yang (2015), *Tiny ImageNet Visual Recognition Challenge* — http://cs231n.stanford.edu/reports/2015/pdfs/yle_project.pdf |
+| ResizeMix | Qin et al. (2020), *ResizeMix: Mixing Data with Preserved Object Information and True Labels* — https://arxiv.org/abs/2012.11101 |
+| RandAugment | Cubuk et al. (2020), *RandAugment* — https://arxiv.org/abs/1909.13719 |
 
+## StandardCNN
 
-```
-This:
-The model reconstructs the input image through hierarchical predictive-coding inference and 
-uses the higher-level latent representation (r2) for image classification.
+`src/model/cnn.py`. The baseline, trained with backprop.
 
-Or a bit simpler:
+- 8 conv layers (3×3, 2 per block: 32-64 · 64-128 · 128-256 · 256-512), each conv → BatchNorm → LeakyReLU (0.05).
+- Max-pool after blocks 1–3; conv8 dilation 2. Dropout2d 0.15 (block 3), 0.25 (block 4).
+- Global average pooling → dense 512 (BN, LeakyReLU, dropout 0.35) → classifier. 2.71M parameters (200 classes).
+- Training: SGD (Nesterov, momentum 0.9, lr 0.05, weight decay 1e-4), cosine schedule, label smoothing 0.1, batch 64, 100 epochs.
 
-The PC-CNN learns to reconstruct the input image and then uses the higher-level representation 
-learned during predictive-coding inference to classify the image.
+| Used for | Paper |
+|---|---|
+| 3×3 conv blocks (VGG style) | Simonyan & Zisserman (2015) — https://arxiv.org/abs/1409.1556 |
+| BatchNorm | Ioffe & Szegedy (2015) — https://arxiv.org/abs/1502.03167 |
+| LeakyReLU | Maas et al. (2013), *Rectifier Nonlinearities Improve Neural Network Acoustic Models* — https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf |
+| He (Kaiming) init | He et al. (2015) — https://arxiv.org/abs/1502.01852 |
+| Dilated conv | Yu & Koltun (2016) — https://arxiv.org/abs/1511.07122 |
+| Dropout / Dropout2d | Srivastava et al. (2014) — https://jmlr.org/papers/v15/srivastava14a.html; Tompson et al. (2015) — https://arxiv.org/abs/1411.4280 |
+| Global average pooling | Lin et al. (2014), *Network in Network* — https://arxiv.org/abs/1312.4400 |
+| Label smoothing | Szegedy et al. (2016) — https://arxiv.org/abs/1512.00567 |
+| Cosine schedule | Loshchilov & Hutter (2017), SGDR — https://arxiv.org/abs/1608.03983 |
 
-Unlike a standard CNN trained through end-to-end backpropagation, the proposed PC-CNN performs 
-iterative predictive-coding inference, minimizes local hierarchical prediction errors, and 
-updates its backbone weights using local learning rules. The resulting higher-level 
-representation is then used for image classification.
-```
+## HPCCNNTopDownRaoPCN
 
-A hierarchical convolutional adaptation of Rao-style predictive coding with mini-batch local learning.
+`src/model/pc_cnn_top_down_rao_pcn.py` (class `HPCCNNTopDownRaoPCN`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
 
-# Test
-There are really two scientifically valid approaches:
-| Design                                                | What it measures                                                   |
-| ----------------------------------------------------- | ------------------------------------------------------------------ |
-| Current Rao backbone + frozen linear readout          | Quality of **unsupervised Rao representations** for classification |
-| Rao hierarchy + supervised top-level prediction error | Actual **Rao-style PC-CNN classification model**   .'.                |
+- Cycle 0 = one feedforward pass (= the Standard CNN). Then **7 cycles**, in training and at test:
+  1. **Top-down:** each layer predicts the layer below, p = Wᵀr, and the layer moves toward the prediction.
+  2. **Bottom-up:** the prediction error e = r − p goes up through W and corrects the layer above.
+- Tied weights: the prediction uses the transposed conv of the same layer. Update rates learned per channel.
+- **Per conv, not per block:** each of the 8 convs has its own top-down prediction (`conv_transpose2d` with that conv's weight). Unpool to the max-pool winners only after conv2, 4, 6.
 
-### Experiment 1
-### Test 1
-r3 class separation mainly means two things:
-1. Within-class variation should be SMALL
-2. Between-class distance should be LARGE
-make same-class r3 features closer together + make different-class r3 features farther apart
-r3
-├── predict r2 well          → low e2
-└── separate classes well    → low within-class spread + high between-class distance
-             weak r3 representation
-                    ↓
-both poor class separation and weak e2 behavior
+| Block | Conv | Bottom-up (conv) | Top-down (transposed conv, same weight) |
+|---|---|---|---|
+| level1 | conv1 | image → r1 (32×64×64) | r1 → image |
+| | conv2 + pool | r1 → r2 (64×32×32) | r2 → unpool → r1 |
+| level2 | conv3 | r2 → r3 (64×32×32) | r3 → r2 |
+| | conv4 + pool | r3 → r4 (128×16×16) | r4 → unpool → r3 |
+| level3 | conv5 | r4 → r5 (128×16×16) | r5 → r4 |
+| | conv6 + pool | r5 → r6 (256×8×8) | r6 → unpool → r5 |
+| level4 | conv7 | r6 → r7 (256×8×8) | r7 → r6 |
+| | conv8 (dilation 2) | r7 → r8 (512×8×8) | r8 → r7 |
 
-1. Understand/improve e2 at r2 ↔ r3
-2. Improve r3 class separation
+- All weights learned by backprop through the cycles. Hidden dropout uses one mask for all cycles.
+- 2,368 extra parameters (the rates).
 
-After these diagnostics:
-1. r2 ↔ r3 / e2   ✓ understood and reasonably healthy
-2. r3 class separation   ← MAIN PROBLEM NOW
-
-A. Class feedback itself does not separate r3
-B. Class feedback separates r3, but learning fails to preserve it
-Your result strongly supports B.
-
-### Test 2
-Reconstruction                 ✓
-r1/r2                          ✓
-r2 ↔ r3 predictive relation    ✓
-e2                             ✓ reasonably healthy
-Class feedback magnitude       ✓ sufficient
-Class nudge                    ✓ improves r3 separation
-
-Main remaining weakness:
-NUDGED r3 structure → FREE r3 learning/preservation
-
-50-nudge training did not improve the final FREE r3 classification representation
-10 nudge steps:
-classes are somewhat closer together,
-but samples inside each class are more compact.
-50 nudge steps:
-class centers move slightly farther apart,
-BUT each class also spreads out considerably.
-This is why 50-step nudging looked excellent in the NUDGED r3, 
-but did not improve the final FREE r3 representation we actually use at test time.
-
-### Test 3
-In our r3 representation analysis:
-- Within-class spread = how far samples of the same class are spread around 
-their own class centroid. Lower is better because same-class images are clustering more tightly.
-- Between-class distance = distance between the centroids of different classes. 
-Higher is better because different classes are farther apart.
-
-those are the three core geometry measures we are using for FREE r3 class separation:
-1. Within-class spread
-2. Between-class distance
-3. Separation ratio
-
-Within-class spread: are samples from the same class close together? Lower is better.
-Between-class distance: are different class centroids far apart? Higher is better.
-Separation ratio: between-class distance / within-class spread
-
-### Experiment 2: nonlinear_rao_pccnn_joint_supervised
-FREE validation accuracy       ↑
-FREE r3 within-class spread    ↓
-FREE r3 between-class distance ↑
-FREE r3 separation ratio       ↑
-FREE nearest-centroid accuracy ↑
-
-
-https://github.com/miladmozafari/predify/tree/master
-https://github.com/dbersan/Predictive-Coding-Implementation/blob/main/README.md
-https://medium.com/@oliviers.gaspard/training-brain-inspired-predictive-coding-models-in-python-5a7011e2779d
-https://github.com/Bogacz-Group/PredictiveCoding/blob/main/README.md
-
-CURRENT DIRECTION
-Rao-style generative hierarchy
-+
-our manually attached supervised class feedback
-
-
-MORE PRINCIPLED SUPERVISED DIRECTION
-Rao-style local prediction/error hierarchy
-+
-Whittington-Bogacz idea:
-class/output becomes the highest predictive level
-+
-manual local equations
-+
-NO autograd
-+
-NO backward()
-
-# New comcept
-Rao (inspired hierarchical predictive coding)
-Karl Friston (Free Energy Principle (FEP) to minimize variational free energy for generative model)
-Whittington–Bogacz (predictive-coding/free-energy formulation for supervised model)
-
-        Rao & Ballard
-            ↓
-        Hierarchical predictive coding
-        Top-down prediction
-        Bottom-up prediction error
-        
-        Friston
-            ↓
-        Broader Free Energy Principle
-        Variational inference / generative models
-        Prediction-error minimization as part of a larger theory
-        
-        Whittington & Bogacz
-            ↓
-        Neural-network predictive coding
-        Free-energy / error minimization
-        Supervised target clamping
-        Local learning rules
-
-
-| Researcher / Framework                         | Main idea                                                                                                                                         | Role in predictive coding                                                                                             |
-| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------- |
-| **Rao & Ballard**                              | Hierarchical predictive coding for sensory processing: higher levels generate top-down predictions, lower levels send bottom-up prediction errors | Core hierarchical prediction/error architecture                                                                       |
-| **Karl Friston — Free Energy Principle (FEP)** | Biological systems can be described as minimizing variational free energy under a generative model                                                | Broader theoretical framework linking perception, inference, prediction, and action                                   |
-| **Whittington & Bogacz**                       | Predictive coding formulated as free-energy / prediction-error minimization, including supervised learning and local weight updates               | Practical neural-network formulation showing how PC can approximate learning normally associated with backpropagation |
+| Used for | Paper |
+|---|---|
+| Top-down predictions, bottom-up errors, tied weights | Rao & Ballard (1999), *Predictive coding in the visual cortex*, Nature Neuroscience — https://doi.org/10.1038/4580 |
+| Cycle schedule, update rates, training through the cycles | Wen et al. (2018), *Deep Predictive Coding Network for Object Recognition*, ICML — https://arxiv.org/abs/1802.04762 |
+| Same dropout mask in every cycle | Gal & Ghahramani (2016), *A Theoretically Grounded Application of Dropout in Recurrent Neural Networks* — https://arxiv.org/abs/1512.05287 |

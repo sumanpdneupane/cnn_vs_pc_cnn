@@ -1,0 +1,636 @@
+<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>:root{color-scheme:light;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}html{scroll-padding-top:env(safe-area-inset-top,0px)}body{margin:0;padding:0;font:14px -apple-system,BlinkMacSystemFont,sans-serif;background:#fff;color:#000}img{max-width:100%}[hidden]:not([hidden=until-found i]){display:none!important}</style></head><body>
+<title>Tiny ImageNet CNN Standings</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+Condensed:wght@500;600;700&family=IBM+Plex+Sans:wght@400;500;600&display=swap">
+<style>
+/* Layout: lab-notebook results sheet. One summary panel for the user's model, a filter bar, then one dense, sortable table with in-cell bars on a shared 0-100 scale. */
+:root {
+  --bg: #f3f6f7;
+  --surface: #ffffff;
+  --ink: #142029;
+  --muted: #586a77;
+  --rule: #d6dee3;
+  --rule-soft: #e7ecef;
+  --accent: #0a6a86;
+  --accent-soft: #dcecf1;
+  --you-bg: #fff3d2;
+  --you-line: #d39716;
+  --pos: #1d7349;
+  --neg: #a93d2b;
+  --bar: #9fbfcb;
+  --bar-you: #d39716;
+  --chip-bg: #eef2f4;
+  --font-display: "IBM Plex Sans Condensed", "Arial Narrow", "Helvetica Neue", Arial, sans-serif;
+  --font-body: "IBM Plex Sans", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #0e1418; --surface: #151d23; --ink: #e4ecf1; --muted: #93a4b1; --rule: #27333c; --rule-soft: #1d272e;
+    --accent: #5bb8d3; --accent-soft: #17323d; --you-bg: #3a2d0f; --you-line: #e9b949; --pos: #62c48f; --neg: #e47f6b;
+    --bar: #3e6878; --bar-you: #e9b949; --chip-bg: #1c262d; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #0e1418; --surface: #151d23; --ink: #e4ecf1; --muted: #93a4b1; --rule: #27333c; --rule-soft: #1d272e;
+  --accent: #5bb8d3; --accent-soft: #17323d; --you-bg: #3a2d0f; --you-line: #e9b949; --pos: #62c48f; --neg: #e47f6b;
+  --bar: #3e6878; --bar-you: #e9b949; --chip-bg: #1c262d; color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.5;
+}
+.wrap {
+  max-width: 1280px; margin: 0 auto;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+  padding-block: 32px 56px;
+  display: flex; flex-direction: column; gap: 28px;
+}
+header { display: flex; flex-direction: column; gap: 8px; max-width: 70ch; }
+.eyebrow { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--accent); }
+h1 { font-family: var(--font-display); font-weight: 700; font-size: clamp(28px, 4.2vw, 40px); line-height: 1.1; margin: 0; text-wrap: balance; letter-spacing: -0.01em; }
+.lede { margin: 0; color: var(--muted); max-width: 66ch; }
+h2 { font-family: var(--font-display); font-weight: 600; font-size: 20px; margin: 0; text-wrap: balance; }
+
+/* Summary panel */
+.summary {
+  background: var(--surface); border: 1px solid var(--rule); border-left: 4px solid var(--you-line);
+  border-radius: 6px; padding: 20px; display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 2fr); gap: 24px;
+}
+.you-head { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.you-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.you-acc { font-family: var(--font-display); font-size: 52px; font-weight: 700; line-height: 1; font-variant-numeric: tabular-nums; }
+.you-acc small { font-size: 22px; font-weight: 600; color: var(--muted); }
+.you-meta { color: var(--muted); font-size: 14px; }
+.stats { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px 24px; min-width: 0; }
+.stat { display: flex; flex-direction: column; gap: 2px; border-top: 1px solid var(--rule-soft); padding-top: 10px; min-width: 0; }
+.stat .k { font-size: 13px; color: var(--muted); }
+.stat .v { font-family: var(--font-mono); font-size: 20px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.stat .d { font-size: 13px; color: var(--muted); }
+
+/* Controls */
+.controls { display: flex; flex-direction: column; gap: 12px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: center; }
+.group-label { font-family: var(--font-mono); font-size: 12px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); min-width: 104px; }
+.seg { display: flex; flex-wrap: wrap; gap: 6px; }
+.seg button {
+  font: inherit; font-size: 14px; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--rule);
+  background: var(--surface); color: var(--ink); cursor: pointer;
+}
+.seg button:hover { border-color: var(--accent); }
+.seg button[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--surface); }
+button:focus-visible, input:focus-visible, a:focus-visible, th button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.search { font: inherit; font-size: 14px; padding: 7px 12px; border-radius: 6px; border: 1px solid var(--rule); background: var(--surface); color: var(--ink); width: min(320px, 100%); }
+.check { display: inline-flex; gap: 8px; align-items: center; font-size: 14px; color: var(--ink); cursor: pointer; }
+.check input { accent-color: var(--accent); width: 16px; height: 16px; }
+.count { font-family: var(--font-mono); font-size: 13px; color: var(--muted); }
+
+/* Table */
+.table-wrap { overflow-x: auto; background: var(--surface); border: 1px solid var(--rule); border-radius: 6px; }
+table { border-collapse: collapse; width: 100%; min-width: 1240px; font-size: 14px; }
+thead th {
+  text-align: left; font-weight: 600; font-size: 12px; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted);
+  border-bottom: 1px solid var(--rule); padding: 0; background: var(--surface); white-space: nowrap;
+}
+thead th button { all: unset; display: flex; gap: 6px; align-items: center; padding: 10px 12px; cursor: pointer; width: 100%; box-sizing: border-box; }
+thead th button:hover { color: var(--ink); }
+thead th .arrow { font-family: var(--font-mono); color: var(--accent); min-width: 1ch; }
+thead th.num button { justify-content: flex-end; }
+tbody td { padding: 9px 12px; border-bottom: 1px solid var(--rule-soft); vertical-align: top; }
+tbody tr:last-child td { border-bottom: 0; }
+tbody tr:hover td { background: var(--accent-soft); }
+tbody tr.you td { background: var(--you-bg); border-bottom-color: var(--you-line); border-top: 1px solid var(--you-line); }
+td.num { text-align: right; font-family: var(--font-mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+td.rank { color: var(--muted); }
+.model { font-weight: 600; }
+.note { display: block; font-size: 12.5px; color: var(--muted); margin-top: 2px; max-width: 46ch; }
+.recipe { font-size: 13px; color: var(--muted); max-width: 30ch; }
+.chip { display: inline-block; font-size: 12px; padding: 1px 8px; border-radius: 999px; background: var(--chip-bg); color: var(--ink); white-space: nowrap; border: 1px solid var(--rule); }
+.chip.none { border-color: var(--you-line); }
+.tag { display: inline-block; font-family: var(--font-mono); font-size: 11px; padding: 0 6px; border-radius: 3px; margin-left: 6px; border: 1px solid var(--rule); color: var(--muted); vertical-align: 1px; }
+.tag.you { border-color: var(--you-line); color: var(--ink); background: var(--you-bg); }
+.acc-cell { display: flex; flex-direction: column; gap: 4px; align-items: flex-end; min-width: 120px; }
+.acc-val { font-family: var(--font-mono); font-weight: 500; font-variant-numeric: tabular-nums; }
+.track { position: relative; width: 110px; height: 6px; background: var(--rule-soft); border-radius: 3px; }
+.fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--bar); border-radius: 3px; }
+tr.you .fill { background: var(--bar-you); }
+.mark { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--you-line); }
+.pos { color: var(--pos); }
+.neg { color: var(--neg); }
+a { color: var(--accent); }
+.src a { text-decoration: none; border-bottom: 1px solid var(--rule); }
+.src a:hover { border-bottom-color: var(--accent); }
+.src { min-width: 220px; max-width: 300px; }
+.src-url { display: block; margin-top: 3px; font-family: var(--font-mono); font-size: 11.5px; line-height: 1.35; color: var(--muted); word-break: break-all; }
+.src-url a { color: var(--muted); border-bottom: 0; text-decoration: underline; text-decoration-color: var(--rule); }
+.src-url a:hover { color: var(--accent); }
+.empty { padding: 28px 12px; color: var(--muted); text-align: center; }
+
+/* Notes */
+.notes { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.notes section { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.notes ul { margin: 0; padding-left: 18px; display: flex; flex-direction: column; gap: 6px; color: var(--ink); max-width: 66ch; }
+.notes li { color: var(--ink); }
+.legend { display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 13px; color: var(--muted); align-items: center; }
+.legend .swatch { display: inline-block; width: 12px; height: 2px; background: var(--you-line); margin-right: 6px; vertical-align: middle; }
+
+@media (max-width: 820px) {
+  .summary { grid-template-columns: minmax(0, 1fr); }
+  .notes { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 480px) {
+  .stats { grid-template-columns: minmax(0, 1fr); }
+  .group-label { min-width: 0; width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">Tiny ImageNet · 200 classes · 64×64 · top-1 accuracy</div>
+    <h1>Tiny ImageNet CNN Standings</h1>
+    <p class="lede">Published convolutional-network results on 200-class Tiny ImageNet, set against your 8-conv plain network. Filter by how each model was trained and by the kind of connections it uses; click a column to sort.</p>
+  </header>
+
+  <section class="summary" aria-label="Your model at a glance">
+    <div class="you-head">
+      <span class="you-label">Your model · Our08CNNPoolBN</span>
+      <span class="you-acc">63.94<small>%</small></span>
+      <span class="you-meta">8 conv + BatchNorm, no skip connections, 2.71M params, ~0.53 GMACs, trained from scratch at 64×64 for 100 epochs.</span>
+    </div>
+    <div class="stats" id="stats"></div>
+  </section>
+
+  <section class="controls" aria-label="Filters">
+    <div class="row">
+      <span class="group-label">Training</span>
+      <div class="seg" id="seg-cat" role="group" aria-label="Training regime"></div>
+    </div>
+    <div class="row">
+      <span class="group-label">Connections</span>
+      <div class="seg" id="seg-conn" role="group" aria-label="Connection type"></div>
+    </div>
+    <div class="row">
+      <span class="group-label">Find</span>
+      <input class="search" id="q" type="search" placeholder="Model, method or source" aria-label="Search models">
+      <label class="check" for="hide-ens"><input type="checkbox" id="hide-ens"> Hide ensembles</label>
+      <label class="check" for="hide-low"><input type="checkbox" id="hide-low"> Hide low-confidence rows</label>
+      <span class="count" id="count" aria-live="polite"></span>
+    </div>
+  </section>
+
+  <div class="table-wrap">
+    <table id="tbl">
+      <thead>
+        <tr>
+          <th class="num"><button type="button" data-key="rank"># <span class="arrow"></span></button></th>
+          <th><button type="button" data-key="m">Model <span class="arrow"></span></button></th>
+          <th><button type="button" data-key="c">Connections <span class="arrow"></span></button></th>
+          <th class="num"><button type="button" data-key="p">Params (M) <span class="arrow"></span></button></th>
+          <th class="num"><button type="button" data-key="r">Input px <span class="arrow"></span></button></th>
+          <th><button type="button" data-key="cat">Training <span class="arrow"></span></button></th>
+          <th><button type="button" data-key="rec">Recipe <span class="arrow"></span></button></th>
+          <th class="num"><button type="button" data-key="a">Top-1 % <span class="arrow"></span></button></th>
+          <th class="num"><button type="button" data-key="d">vs yours <span class="arrow"></span></button></th>
+          <th><button type="button" data-key="src">Source <span class="arrow"></span></button></th>
+        </tr>
+      </thead>
+      <tbody id="tbody"></tbody>
+    </table>
+  </div>
+  <div class="legend">
+    <span><span class="swatch"></span>Amber tick in each bar = your 63.94%. Bars run 0–100% on one scale.</span>
+    <span>Input <span style="font-family:var(--font-mono)">64*</span> = resolution not stated in the source; native 64×64 assumed.</span>
+    <span>Split: val = official validation set, test = test set or a held-out split, n/s = not stated.</span>
+    <span>vs yours: <span class="pos">green</span> = your model is ahead, <span class="neg">red</span> = that model is ahead.</span>
+  </div>
+
+  <div class="notes">
+    <section>
+      <h2>How to read the comparison</h2>
+      <ul>
+        <li>The fairest peers for your model are rows marked <strong>From scratch, 64px</strong>: trained only on the 100k Tiny ImageNet images at native size, one network, no teacher.</li>
+        <li><strong>Distilled</strong> rows also train from scratch on Tiny ImageNet, but learn from a larger teacher network that was itself trained on Tiny ImageNet.</li>
+        <li><strong>ImageNet-pretrained</strong> rows start from weights learned on 1.28M full-size ImageNet images (which contain Tiny ImageNet's classes) and usually upscale inputs to 224–299px. They are listed for scale, not as like-for-like competitors.</li>
+        <li>Rank (#) is recomputed by top-1 within whatever filters are active.</li>
+      </ul>
+    </section>
+    <section>
+      <h2>Caveats</h2>
+      <ul>
+        <li>Recipes differ widely: 10 to 1,200 epochs, different augmentation, different stems. A gap of 1–2 points between two papers is often recipe, not architecture.</li>
+        <li>Many sources, like your log, report the best epoch on the validation set they also report. Test-set numbers from the old Stanford leaderboard run 4–8 points lower than validation numbers.</li>
+        <li>Mixup-benchmark rows (OpenMixup, AdAutoMix, MixMo, Catch-up Mix) are tuned for 400–1,200 epochs; your run used 100.</li>
+        <li>Rows tagged <span class="tag">?</span> have a weak source (an example log line, a blog post, an unclear split or an ambiguous model attribution).</li>
+        <li>No Tiny ImageNet results turned up for RepVGG, VanillaNet or ParNet, the modern plain-network designs.</li>
+        <li>A 30-class Tiny ImageNet subset study (arXiv 2505.08259) was excluded because its numbers are not comparable to the 200-class task.</li>
+      </ul>
+    </section>
+  </div>
+</div>
+
+<script>
+const YOU = 63.94;
+
+const CATS = {
+  S64: "From scratch, 64px",
+  KD: "Distilled (from scratch)",
+  S224: "From scratch, upscaled",
+  PT: "ImageNet-pretrained"
+};
+const CONNS = {
+  none: "None (plain)",
+  branch: "Branch concat",
+  dense: "Dense concat",
+  split: "Channel split + concat",
+  residual: "Residual",
+  other: "Other / hybrid"
+};
+
+const U = {
+  openmixup: ["OpenMixup benchmark", "https://openmixup.readthedocs.io/en/latest/mixup_benchmarks/Mixup_imagenet.html"],
+  adauto: ["AdAutoMix (ICLR 2024)", "https://arxiv.org/pdf/2312.11954"],
+  catchup: ["Catch-up Mix (2024)", "https://arxiv.org/pdf/2401.13193"],
+  mixmo: ["MixMo (ICCV 2021)", "https://arxiv.org/pdf/2103.06132"],
+  sumix: ["SUMix (ECCV 2024)", "https://arxiv.org/html/2407.07805v5"],
+  align: ["AlignMixup (CVPR 2022)", "https://arxiv.org/pdf/2103.15375"],
+  puzzle: ["Puzzle Mix (ICML 2020)", "https://proceedings.mlr.press/v119/kim20b/kim20b.pdf"],
+  tfkd: ["Tf-KD, Yuan et al. (CVPR 2020)", "https://arxiv.org/pdf/1909.11723"],
+  cktf: ["CKTF (ICASSP 2023)", "https://github.com/kaiqi123/cktf"],
+  bickd: ["BicKD (2026)", "https://arxiv.org/pdf/2602.01265"],
+  crld: ["CRLD (2024)", "https://arxiv.org/pdf/2412.16493"],
+  ckpt: ["KD from model checkpoints", "https://openreview.net/pdf?id=0ltDq6SjrfW"],
+  simt: ["Similarity Transfer KD (2021)", "https://arxiv.org/pdf/2103.10047"],
+  spd: ["SPD-Conv (ECML 2022)", "https://arxiv.org/pdf/2208.03641"],
+  upa: ["UPANets (2021)", "https://arxiv.org/pdf/2103.08640"],
+  wavemix: ["WaveMix (2022–24)", "https://arxiv.org/html/2205.14375v5"],
+  bmvc23: ["BMVC 2023, Chen et al.", "https://papers.bmvc2023.org/0522.pdf"],
+  zeyuan: ["zeyuanyin/tiny-imagenet", "https://github.com/zeyuanyin/tiny-imagenet"],
+  abai: ["Abai & Rajmalwar (2019)", "https://arxiv.org/pdf/1904.10429"],
+  wu: ["Jiayu Wu, CS231n 2017", "https://cs231n.stanford.edu/reports/2017/pdfs/930.pdf"],
+  sun: ["Lei Sun, CS231n 2017", "https://cs231n.stanford.edu/reports/2017/pdfs/12.pdf"],
+  r927: ["WRN report, CS231n 2017", "https://cs231n.stanford.edu/reports/2017/pdfs/927.pdf"],
+  yu: ["Hujia Yu, CS231n 2017", "https://cs231n.stanford.edu/reports/2017/pdfs/931.pdf"],
+  ma: ["Yinbin Ma, CS231n 2017", "https://cs231n.stanford.edu/reports/2017/pdfs/935.pdf"],
+  milani: ["Milani, CS231n 2017", "https://cs231n.stanford.edu/reports/2017/pdfs/928.pdf"],
+  denres: ["DenResNet, CS231n 2017", "https://cs231n.stanford.edu/reports/2017/pdfs/933.pdf"],
+  kim: ["Hansohl Kim, CS231n 2016", "https://cs231n.stanford.edu/reports/2016/pdfs/411_Report.pdf"],
+  ebra: ["Ebrahimi, CS231n 2016", "https://cs231n.stanford.edu/reports/2016/pdfs/264_Report.pdf"],
+  khosla: ["Khosla, CS231n 2016", "https://cs231n.stanford.edu/reports/2016/pdfs/419_Report.pdf"],
+  le: ["Le & Yang, CS231n 2015", "https://cs231n.stanford.edu/reports/2015/pdfs/yle_project.pdf"],
+  pat: ["pat-coady VGG-16 write-up", "https://github.com/pat-coady/learning_ai/blob/master/_posts/2017-06-29-tiny-imagenet.md"],
+  aes: ["AestheticVoyager/vggnet-pytorch", "https://github.com/AestheticVoyager/vggnet-pytorch"],
+  meet: ["TinyImageNet-Benchmarks repo", "https://github.com/meet-minimalist/TinyImageNet-Benchmarks"],
+  dennis: ["DennisHanyuanXu/Tiny-ImageNet", "https://github.com/dennishanyuanxu/tiny-imagenet"],
+  kth: ["lhandel/ImageClassification (KTH)", "https://github.com/lhandel/ImageClassification"],
+  gnet: ["meng1994412/GoogLeNet_from_scratch", "https://github.com/meng1994412/GoogLeNet_from_scratch"],
+  rnet: ["meng1994412/ResNet_from_scratch", "https://github.com/meng1994412/ResNet_from_scratch"],
+  hgpu: ["Tiny GoogLeNet (hgpu.org)", "https://hgpu.org/?p=13858"],
+  tj: ["tjmoon0104/Tiny-ImageNet-Classifier", "https://github.com/tjmoon0104/Tiny-ImageNet-Classifier"],
+  tj2: ["tjmoon0104/pytorch-tiny-imagenet", "https://github.com/tjmoon0104/pytorch-tiny-imagenet"],
+  light: ["Lightweight CNN benchmark (arXiv 2505.03303)", "https://arxiv.org/pdf/2505.03303"],
+  backbone: ["Which Backbone to Use (2024)", "https://arxiv.org/html/2406.05612v1"],
+  dcl: ["DCL (TPAMI 2019)", "https://github.com/luoyan407/congruency"],
+  tds: ["Transfer Learning in Action (blog)", "https://towardsdatascience.com/transfer-learning-in-action-from-imagenet-to-tiny-imagenet-b96fe3aa5973/"],
+  mnv1: ["kd13/Modern-MobileNet model card", "https://huggingface.co/kd13/Modern-MobileNet"]
+};
+
+// m model, c connections, p params (M), r input, cat training, rec recipe, a top-1, s split, k source key, n note, ens, low, you
+const ROWS = [
+  { m: "Our08CNNPoolBN", c: "none", p: 2.71, r: "64", cat: "S64", rec: "100 ep, SGD + cosine, RandAugment 2/5, 50% clean / 25% MixUp / 25% CutMix", a: 63.94, s: "val", k: null, n: "Best epoch (98). Final epoch 63.78%.", you: true },
+
+  // From scratch, 64px — plain
+  { m: "VGG-13", c: "none", p: null, r: "64*", cat: "S64", rec: "240 ep, trained as a distillation teacher", a: 62.21, s: "n/s", k: "simt" },
+  { m: "VGG-19", c: "none", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper teacher)", a: 61.62, s: "test", k: "cktf" },
+  { m: "VGG-16", c: "none", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper teacher)", a: 61.35, s: "test", k: "cktf" },
+  { m: "VGG-16 (community repo)", c: "none", p: null, r: "64", cat: "S64", rec: "100 ep, crop, flip, rotation, color jitter, random erasing", a: 59.0, s: "val", k: "aes", low: true, n: "Read from an example log line, not a reported result." },
+  { m: "16-layer VGG-style plain CNN", c: "none", p: 138, r: "64*", cat: "S64", rec: "VGG-style layer-wise init, dropout", a: 59.50, s: "val", k: "le", n: "Original 2015 Tiny ImageNet report." },
+  { m: "VGG-11", c: "none", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper student)", a: 58.60, s: "test", k: "cktf" },
+  { m: "VGG-16, last pool and 3 conv removed", c: "none", p: null, r: "64", cat: "S64", rec: "Crops, flips, no hue jitter", a: 56.4, s: "val", k: "pat" },
+  { m: "VGG-19", c: "none", p: 40.2, r: "56", cat: "S64", rec: "Random 56px crops", a: 54.69, s: "val", k: "wu", n: "Test 49.78%." },
+  { m: "VGG-8", c: "none", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper student)", a: 54.61, s: "test", k: "cktf" },
+  { m: "VGG-16", c: "none", p: 36.7, r: "56", cat: "S64", rec: "Random 56px crops", a: 52.78, s: "val", k: "wu", n: "Test 48.07%." },
+  { m: "VGG-16 + BatchNorm", c: "none", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 48.15, s: "test", k: "meet" },
+  { m: "9-layer plain CNN (3×3, LeakyReLU)", c: "none", p: 60.56, r: "64*", cat: "S64", rec: "Screened data, dropout", a: 46.45, s: "val", k: "le" },
+  { m: "AlexNet, reduced capacity", c: "none", p: 15, r: "64", cat: "S64", rec: "10 ep", a: 43.65, s: "val", k: "yu" },
+  { m: "8-layer plain CNN (3×3, LeakyReLU)", c: "none", p: 14.2, r: "64*", cat: "S64", rec: "Screened data, dropout", a: 40.19, s: "val", k: "le" },
+  { m: "VGG-16", c: "none", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults, no BatchNorm", a: 38.75, s: "test", k: "meet" },
+  { m: "5-layer plain CNN (5×5)", c: "none", p: 1.97, r: "64*", cat: "S64", rec: "Xavier init", a: 37.27, s: "val", k: "le" },
+  { m: "15-layer plain ConvNet", c: "none", p: null, r: "64", cat: "S64", rec: "Twin of a 15-layer ResNet, skips removed", a: 36, s: "val", k: "ebra", n: "The matching 15-layer ResNet reached 49%." },
+  { m: "AlexNet", c: "none", p: null, r: "64", cat: "S64", rec: "Keras augmentation (zoom, flip)", a: 32.92, s: "val", k: "kth" },
+  { m: "VGG-Y", c: "none", p: null, r: "64", cat: "S64", rec: "Keras augmentation", a: 32.25, s: "val", k: "kth" },
+  { m: "VGG-F", c: "none", p: null, r: "64", cat: "S64", rec: "Keras augmentation", a: 31.41, s: "val", k: "kth" },
+  { m: "AlexNet, modified kernels and strides", c: "none", p: null, r: "64", cat: "S64", rec: "From scratch", a: 31, s: "val", k: "dennis" },
+  { m: "ResNet-18 with residuals removed", c: "none", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 28.7, s: "test", k: "meet", n: "Same repo's ResNet-18 with residuals: 41.45%." },
+  { m: "Small 3-block plain CNN", c: "none", p: null, r: "64", cat: "S64", rec: "Adam, L2 0.01", a: 24.35, s: "val", k: "khosla" },
+  { m: "ResNet-34 with residuals removed", c: "none", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 12.67, s: "test", k: "meet" },
+
+  // From scratch, 64px — Inception / branch concat
+  { m: "GoogLeNet", c: "branch", p: null, r: "64", cat: "S64", rec: "From scratch", a: 57.34, s: "val", k: "gnet" },
+  { m: "GoogLeNet, reduced capacity", c: "branch", p: 1.1, r: "64", cat: "S64", rec: "10 ep", a: 49.40, s: "val", k: "yu" },
+  { m: "Inception-v3-style custom net", c: "branch", p: null, r: "64", cat: "S64", rec: "BatchNorm, Adam, label smoothing", a: 48.5, s: "val", k: "milani", n: "52.2% with a 9-snapshot ensemble." },
+  { m: "Tiny GoogLeNet", c: "branch", p: null, r: "64*", cat: "S64", rec: "Dropout, crop and flip", a: 47, s: "val", k: "hgpu" },
+  { m: "Inception-v2", c: "branch", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 38.41, s: "test", k: "meet" },
+  { m: "Inception-v3", c: "branch", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 35.76, s: "test", k: "meet" },
+  { m: "Inception-v1", c: "branch", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 22.59, s: "test", k: "meet" },
+
+  // From scratch, 64px — dense
+  { m: "DenseNet-121", c: "dense", p: null, r: "64", cat: "S64", rec: "200 ep, SGD, step LR", a: 68.15, s: "n/s", k: "tfkd" },
+  { m: "Custom DenseNet (Network 2)", c: "dense", p: null, r: "64", cat: "S64", rec: "~108 ep, cyclical LR, imgaug", a: 62.73, s: "val", k: "abai" },
+  { m: "Custom DenseNet (Network 1)", c: "dense", p: null, r: "64", cat: "S64", rec: "Progressive resizing 16→64px, imgaug", a: 59.5, s: "val", k: "abai" },
+
+  // From scratch, 64px — residual
+  { m: "ResNeXt-50 + AdAutoMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep, mean of 3 runs", a: 72.89, s: "n/s", k: "adauto" },
+  { m: "PreActResNet-50 + Catch-up Mix", c: "residual", p: null, r: "64", cat: "S64", rec: "1,200 ep", a: 72.58, s: "n/s", k: "catchup" },
+  { m: "ResNeXt-50 + SAMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 72.18, s: "n/s", k: "openmixup" },
+  { m: "PreActResNet-50 + PuzzleMix", c: "residual", p: null, r: "64", cat: "S64", rec: "1,200 ep", a: 71.39, s: "n/s", k: "catchup" },
+  { m: "ResNeXt-50 + AutoMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 70.72, s: "n/s", k: "openmixup" },
+  { m: "PreActResNet-18, 3× width + Cut-MixMo", c: "residual", p: 100.5, r: "64", cat: "S64", rec: "1,200 ep, 4 subnetworks in one model", a: 70.24, s: "n/s", k: "mixmo" },
+  { m: "ResNeXt-50 + SmoothMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 69.65, s: "n/s", k: "openmixup" },
+  { m: "PreActResNet-18 + Catch-up Mix", c: "residual", p: null, r: "64", cat: "S64", rec: "1,200 ep", a: 69.27, s: "n/s", k: "catchup" },
+  { m: "ResNet-18 + AdAutoMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep, mean of 3 runs", a: 69.19, s: "n/s", k: "adauto" },
+  { m: "ResNet-50", c: "residual", p: null, r: "64", cat: "S64", rec: "240 ep (distillation-paper teacher)", a: 69.09, s: "n/s", k: "bickd" },
+  { m: "PreActResNet-18, 3× width + CutMix", c: "residual", p: 100.5, r: "64", cat: "S64", rec: "1,200 ep", a: 68.95, s: "n/s", k: "mixmo" },
+  { m: "ResNeXt-50 + SaliencyMix + SUMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 68.92, s: "n/s", k: "sumix" },
+  { m: "ResNet-18 + SAMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 68.89, s: "n/s", k: "openmixup" },
+  { m: "ResNet-18 + Catch-up Mix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 68.84, s: "n/s", k: "catchup" },
+  { m: "PreActResNet-18, 2× width + CutMix", c: "residual", p: 44.9, r: "64", cat: "S64", rec: "1,200 ep", a: 67.76, s: "n/s", k: "mixmo" },
+  { m: "UPANets64", c: "other", p: 24.4, r: "64", cat: "S64", rec: "100 ep, crop and flip, cosine LR", a: 67.67, s: "test", k: "upa", n: "CNN with pixel attention; connection pattern not checked here." },
+  { m: "ResNet-50", c: "residual", p: null, r: "64", cat: "S64", rec: "200 ep, SGD, step LR", a: 67.47, s: "n/s", k: "tfkd" },
+  { m: "ResNet-18 + AutoMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 67.33, s: "n/s", k: "openmixup" },
+  { m: "PreActResNet-18 + AlignMixup/AE", c: "residual", p: null, r: "64*", cat: "S64", rec: "1,200 ep", a: 67.27, s: "n/s", k: "align" },
+  { m: "ResNeXt-50 + CutMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 66.47, s: "n/s", k: "openmixup" },
+  { m: "PreActResNet-18, 3× width", c: "residual", p: 100.5, r: "64", cat: "S64", rec: "1,200 ep, no mixing", a: 65.78, s: "n/s", k: "mixmo" },
+  { m: "ResNet-18 + CutMix", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep", a: 65.53, s: "n/s", k: "openmixup" },
+  { m: "ResNet-34", c: "residual", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper teacher)", a: 65.38, s: "test", k: "cktf" },
+  { m: "ResNet-50", c: "residual", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper teacher)", a: 65.34, s: "test", k: "cktf" },
+  { m: "ResNet-34, full pre-activation", c: "residual", p: null, r: "64", cat: "S64", rec: "Heavy augmentation, stochastic depth", a: 65.32, s: "n/s", k: "sun", low: true, n: "Report gives 34.68% error without naming the split." },
+  { m: "PreActResNet-18 + CutMix", c: "residual", p: 11.2, r: "64", cat: "S64", rec: "1,200 ep", a: 65.09, s: "n/s", k: "mixmo" },
+  { m: "ResNeXt-50", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep, no mixing", a: 65.04, s: "n/s", k: "openmixup" },
+  { m: "PreActResNet-18, 2× width", c: "residual", p: 44.9, r: "64", cat: "S64", rec: "1,200 ep, no mixing", a: 64.80, s: "n/s", k: "mixmo" },
+  { m: "WaveMix-244/12 + TrivialAugment", c: "other", p: null, r: "64", cat: "S64", rec: "Wavelet token-mixing network built from convs", a: 64.51, s: "n/s", k: "wavemix" },
+  { m: "ResNet-18 with SPD-Conv", c: "residual", p: null, r: "64", cat: "S64", rec: "200 ep, space-to-depth instead of stride", a: 64.52, s: "n/s", k: "spd" },
+  { m: "ResNet-32×4", c: "residual", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper teacher)", a: 64.30, s: "n/s", k: "crld" },
+  { m: "PreActResNet-18 + PuzzleMix", c: "residual", p: null, r: "64", cat: "S64", rec: "Same protocol as Puzzle Mix paper", a: 63.48, s: "n/s", k: "puzzle" },
+  { m: "ResNet-50", c: "residual", p: null, r: "64*", cat: "S64", rec: "200 ep, 3×3 stem per repo", a: 63.45, s: "n/s", k: "zeyuan" },
+  { m: "ResNet-18", c: "residual", p: null, r: "64", cat: "S64", rec: "200 ep, SGD, step LR", a: 63.44, s: "n/s", k: "tfkd" },
+  { m: "WRN-40-2", c: "residual", p: null, r: "64", cat: "S64", rec: "240 ep (distillation-paper teacher)", a: 62.84, s: "n/s", k: "bickd" },
+  { m: "PreActResNet-18", c: "residual", p: 11.2, r: "64", cat: "S64", rec: "1,200 ep, no mixing", a: 62.56, s: "n/s", k: "mixmo" },
+  { m: "Inception-ResNet", c: "residual", p: 8.3, r: "56", cat: "S64", rec: "Random 56px crops", a: 62.44, s: "val", k: "wu", n: "Test 56.90%." },
+  { m: "PreActResNet-50", c: "residual", p: null, r: "64", cat: "S64", rec: "1,200 ep, no mixing", a: 62.32, s: "n/s", k: "catchup" },
+  { m: "ResNet-18", c: "residual", p: null, r: "64", cat: "S64", rec: "400 ep, no mixing", a: 61.68, s: "n/s", k: "openmixup" },
+  { m: "ResNet-18", c: "residual", p: null, r: "64*", cat: "S64", rec: "200 ep, 3×3 stem per repo", a: 60.50, s: "n/s", k: "zeyuan" },
+  { m: "ResNet-101", c: "residual", p: null, r: "64", cat: "S64", rec: "From scratch (ViT-paper baseline)", a: 59.77, s: "n/s", k: "bmvc23" },
+  { m: "ResNet-10", c: "residual", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper student)", a: 58.01, s: "test", k: "cktf" },
+  { m: "WRN-16-2", c: "residual", p: null, r: "64", cat: "S64", rec: "240 ep (distillation-paper student)", a: 58.00, s: "n/s", k: "bickd" },
+  { m: "41-layer pre-act bottleneck ResNet", c: "residual", p: null, r: "64", cat: "S64", rec: "LR decay, mean subtraction only", a: 57.93, s: "val", k: "rnet" },
+  { m: "WRN-40-2", c: "residual", p: null, r: "64*", cat: "S64", rec: "150 ep (distillation-paper teacher)", a: 57.61, s: "n/s", k: "ckpt" },
+  { m: "PreActResNet-18", c: "residual", p: null, r: "64", cat: "S64", rec: "No mixing (Puzzle Mix baseline)", a: 57.23, s: "n/s", k: "puzzle" },
+  { m: "ResNet (custom)", c: "residual", p: 11.28, r: "56", cat: "S64", rec: "Random 56px crops", a: 56.50, s: "val", k: "wu", n: "Test 53.10%." },
+  { m: "ResNet-18, 2× width (WRN)", c: "residual", p: 25.7, r: "64", cat: "S64", rec: "3×3 stride-1 stem, no max-pool", a: 55.4, s: "val", k: "r927" },
+  { m: "ResNet-20", c: "residual", p: 11, r: "64", cat: "S64", rec: "10 ep", a: 55.40, s: "val", k: "yu", n: "Parameter count as reported; looks high for 20 layers." },
+  { m: "ResNet-8×4", c: "residual", p: null, r: "64*", cat: "S64", rec: "Trained alone (distillation-paper student)", a: 55.25, s: "n/s", k: "crld" },
+  { m: "WaveMix-Lite-160/13", c: "other", p: 6.9, r: "64*", cat: "S64", rec: "No augmentation", a: 54.76, s: "n/s", k: "wavemix" },
+  { m: "WRN-40-1", c: "residual", p: null, r: "64", cat: "S64", rec: "240 ep (distillation-paper student)", a: 54.64, s: "n/s", k: "bickd" },
+  { m: "ResNet-18", c: "residual", p: null, r: "64", cat: "S64", rec: "From scratch (ViT-paper baseline)", a: 53.32, s: "n/s", k: "bmvc23" },
+  { m: "ResNet-34, modified stem", c: "residual", p: 21.4, r: "64", cat: "S64", rec: "3×3 stride-1 stem, no max-pool", a: 53.1, s: "val", k: "r927" },
+  { m: "15-layer ResNet", c: "residual", p: null, r: "64", cat: "S64", rec: "Twin of the 15-layer plain ConvNet", a: 49, s: "val", k: "ebra" },
+  { m: "ResNet-50", c: "residual", p: 25.2, r: "64*", cat: "S64", rec: "No augmentation (cited baseline)", a: 48.77, s: "n/s", k: "wavemix" },
+  { m: "ResNet-18", c: "residual", p: 11.2, r: "64*", cat: "S64", rec: "No augmentation (cited baseline)", a: 48.11, s: "n/s", k: "wavemix" },
+  { m: "ResNet-34", c: "residual", p: 21.3, r: "64*", cat: "S64", rec: "No augmentation (cited baseline)", a: 45.60, s: "n/s", k: "wavemix" },
+  { m: "ResNet-34", c: "residual", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 43.11, s: "test", k: "meet" },
+  { m: "ResNet-18", c: "residual", p: null, r: "64*", cat: "S64", rec: "Benchmark repo defaults", a: 41.45, s: "test", k: "meet" },
+  { m: "ResNet-18, stock ImageNet stem", c: "residual", p: null, r: "64", cat: "S64", rec: "Unchanged 7×7 stride-2 stem + max-pool", a: 25.9, s: "val", k: "tj" },
+
+  // From scratch, 64px — mobile / lightweight
+  { m: "ShuffleNetV2", c: "split", p: null, r: "64", cat: "S64", rec: "200 ep, SGD, step LR", a: 60.51, s: "n/s", k: "tfkd" },
+  { m: "EfficientNet-B0", c: "residual", p: null, r: "64", cat: "S64", rec: "From scratch (ViT-paper baseline)", a: 55.48, s: "n/s", k: "bmvc23" },
+  { m: "MobileNetV2", c: "residual", p: null, r: "64", cat: "S64", rec: "200 ep, SGD, step LR", a: 55.06, s: "n/s", k: "tfkd" },
+  { m: "WRN-40-1", c: "residual", p: null, r: "64*", cat: "S64", rec: "150 ep (distillation-paper student)", a: 53.85, s: "n/s", k: "ckpt" },
+  { m: "MobileNetV2", c: "residual", p: null, r: "64*", cat: "S64", rec: "150 ep (distillation-paper student)", a: 53.75, s: "n/s", k: "ckpt" },
+  { m: "Modern MobileNetV1 (SiLU, LayerNorm)", c: "residual", p: null, r: "64", cat: "S64", rec: "Adds learnable residual scaling to MobileNetV1", a: 44.38, s: "test", k: "mnv1", low: true, n: "Community model card." },
+
+  // From scratch, upscaled
+  { m: "EfficientNet-B0", c: "residual", p: 4.26, r: "224", cat: "S224", rec: "20 ep, AdamW, upscaled from 64px", a: 57.43, s: "test", k: "light" },
+  { m: "MobileNetV3-Small", c: "residual", p: 1.72, r: "224", cat: "S224", rec: "20 ep, AdamW, upscaled from 64px", a: 47.75, s: "test", k: "light" },
+
+  // Distilled
+  { m: "ResNet-18 ← ResNet-50 (KD)", c: "residual", p: null, r: "64", cat: "KD", rec: "200 ep", a: 64.23, s: "n/s", k: "tfkd" },
+  { m: "VGG-11 ← VGG-16 (CKTF + KD)", c: "none", p: null, r: "64*", cat: "KD", rec: "Contrastive + logit distillation", a: 63.97, s: "test", k: "cktf", n: "Plain CNN. Teacher VGG-16 scored 61.35%; the student beat it." },
+  { m: "ResNet-8×4 ← ResNet-32×4 (CRLD-NormKD)", c: "residual", p: null, r: "64*", cat: "KD", rec: "Logit distillation", a: 63.84, s: "n/s", k: "crld" },
+  { m: "VGG-11 ← VGG-16 (KD)", c: "none", p: null, r: "64*", cat: "KD", rec: "Hinton logit distillation", a: 62.51, s: "test", k: "cktf" },
+  { m: "ResNet-10 ← ResNet-34 (CKTF + KD)", c: "residual", p: null, r: "64*", cat: "KD", rec: "Contrastive + logit distillation", a: 62.31, s: "test", k: "cktf" },
+  { m: "ShuffleNetV2, self-distilled (Tf-KD)", c: "split", p: null, r: "64", cat: "KD", rec: "200 ep, teacher-free KD", a: 61.36, s: "n/s", k: "tfkd" },
+  { m: "WRN-16-2 ← ResNet-32×4 (BicKD)", c: "residual", p: null, r: "64", cat: "KD", rec: "240 ep", a: 60.41, s: "n/s", k: "bickd" },
+  { m: "WRN-40-1 ← ResNet-50 (BicKD)", c: "residual", p: null, r: "64", cat: "KD", rec: "240 ep", a: 58.77, s: "n/s", k: "bickd" },
+  { m: "VGG-8 ← VGG-19 (CKTF + KD)", c: "none", p: null, r: "64*", cat: "KD", rec: "Contrastive + logit distillation", a: 58.76, s: "test", k: "cktf" },
+  { m: "MobileNetV2 ← WRN-40-2 (checkpoint KD)", c: "residual", p: null, r: "64*", cat: "KD", rec: "150 ep, snapshot-ensemble teacher", a: 57.28, s: "n/s", k: "ckpt" },
+
+  // ImageNet-pretrained
+  { m: "ResNet-101 / EfficientNet-B1 + DCL", c: "residual", p: null, r: "n/s", cat: "PT", rec: "Fine-tuned with Direction Concentration Learning", a: 84.39, s: "val", k: "dcl", low: true, n: "Repo gives one best number for two models. Baseline without DCL: 84.27%." },
+  { m: "ConvNeXt-Tiny", c: "residual", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 83.42, s: "test", k: "backbone" },
+  { m: "EfficientNetV2-S", c: "residual", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 81.35, s: "test", k: "backbone" },
+  { m: "Ensemble: ResNet-101 + ResNet-152 + DenseNet-121", c: "residual", p: null, r: "n/s", cat: "PT", rec: "Fine-tuned, softmax averaging", a: 80.0, s: "val", k: "denres", ens: true, n: "Test 74.4%; first on the 2017 class leaderboard." },
+  { m: "RegNetY-3.2GF", c: "residual", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 80.14, s: "test", k: "backbone" },
+  { m: "EfficientNetV2-S", c: "residual", p: 20.43, r: "224", cat: "PT", rec: "20 ep, AdamW", a: 78.73, s: "test", k: "light" },
+  { m: "EfficientNet-B0", c: "residual", p: 4.26, r: "224", cat: "PT", rec: "20 ep, AdamW", a: 78.08, s: "test", k: "light" },
+  { m: "ResNeXt-50 32×4d", c: "residual", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 77.86, s: "test", k: "backbone" },
+  { m: "WaveMix-192/16", c: "other", p: null, r: "128", cat: "PT", rec: "ImageNet-1k pretrained, TrivialAugment", a: 77.49, s: "n/s", k: "wavemix" },
+  { m: "MobileNetV3-Large", c: "residual", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 76.74, s: "test", k: "backbone" },
+  { m: "Inception-v3, frozen features + linear head", c: "branch", p: null, r: "299", cat: "PT", rec: "10-crop testing, train-time augmentation", a: 76.7, s: "val", k: "milani", n: "Test 69.1%." },
+  { m: "ShuffleNetV2 2.0×", c: "split", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 76.43, s: "test", k: "backbone" },
+  { m: "WaveMix", c: "other", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 76.30, s: "test", k: "backbone" },
+  { m: "ResNet-50", c: "residual", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 75.33, s: "test", k: "backbone" },
+  { m: "DenseNet-161", c: "dense", p: null, r: "256", cat: "PT", rec: "Full fine-tune, TrivialAugment", a: 75.03, s: "test", k: "backbone" },
+  { m: "ResNet (fine-tuned)", c: "residual", p: null, r: "224", cat: "PT", rec: "Initialized FC, crop testing", a: 75.01, s: "val", k: "kim", n: "Test 68.9%." },
+  { m: "Inception-ResNet-v2", c: "residual", p: null, r: "224", cat: "PT", rec: "Fine-tuned in Keras", a: 75, s: "val", k: "tds", low: true, n: "Blog post, approximate (~75% val, ~78% on its own test split)." },
+  { m: "ResNet-18 (fine-tuned)", c: "residual", p: null, r: "64", cat: "PT", rec: "New 200-class head", a: 74.4, s: "val", k: "ma", n: "Test 68.4%." },
+  { m: "ResNet-18", c: "residual", p: null, r: "224", cat: "PT", rec: "Upscaled with bicubic resize", a: 73.1, s: "val", k: "tj" },
+  { m: "ResNet-18, modified stem (fine-tuned)", c: "residual", p: null, r: "64", cat: "PT", rec: "12 ep", a: 72.8, s: "val", k: "r927", n: "Test 67.6%." },
+  { m: "ResNet-18, re-tuned at 64px", c: "residual", p: null, r: "64", cat: "PT", rec: "From the 224px model, fine-tuned at 64px", a: 72.3, s: "val", k: "tj" },
+  { m: "MobileNetV2", c: "residual", p: 2.48, r: "224", cat: "PT", rec: "20 ep, AdamW", a: 71.41, s: "test", k: "light" },
+  { m: "MobileNetV3-Small", c: "residual", p: 1.72, r: "224", cat: "PT", rec: "20 ep, AdamW", a: 70.95, s: "test", k: "light" },
+  { m: "ResNet-18", c: "residual", p: null, r: "224", cat: "PT", rec: "Fine-tuned, 25-per-class test split", a: 69.62, s: "test", k: "tj2" },
+  { m: "ShuffleNetV2 1.0×", c: "split", p: 1.46, r: "224", cat: "PT", rec: "20 ep, AdamW", a: 69.35, s: "test", k: "light" },
+  { m: "ResNet-18", c: "residual", p: 11.28, r: "224", cat: "PT", rec: "20 ep, AdamW", a: 68.22, s: "test", k: "light" },
+  { m: "SqueezeNet 1.1", c: "branch", p: 0.83, r: "224", cat: "PT", rec: "20 ep, AdamW", a: 60.41, s: "test", k: "light", n: "No skip connections (Fire modules concatenate branches)." },
+  { m: "ResNet-18, stock stem at 64px", c: "residual", p: null, r: "64", cat: "PT", rec: "Pretrained weights, 64px input", a: 56.9, s: "val", k: "tj" },
+  { m: "AlexNet (fine-tuned)", c: "none", p: null, r: "n/s", cat: "PT", rec: "Fine-tuned PyTorch AlexNet", a: 46, s: "val", k: "dennis" }
+];
+
+ROWS.forEach((r, i) => { r.id = i; r.d = r.you ? 0 : +(r.a - YOU).toFixed(2); r.srcLabel = r.k ? U[r.k][0] : "Your training log"; });
+
+const state = { cat: "all", conn: "all", q: "", hideEns: false, hideLow: false, sortKey: "a", sortDir: -1 };
+
+function el(tag, cls, text) { const e = document.createElement(tag); if (cls) e.className = cls; if (text != null) e.textContent = text; return e; }
+function fmt(n, d = 2) { return n == null ? "—" : Number(n).toFixed(d); }
+
+function rankIn(list) {
+  const sorted = [...list].sort((x, y) => y.a - x.a);
+  const pos = sorted.findIndex(r => r.you);
+  return { pos: pos + 1, total: sorted.length, top: sorted[0] };
+}
+
+function renderStats() {
+  const base = ROWS.filter(r => !r.ens && !r.low);
+  const s64 = base.filter(r => r.cat === "S64");
+  const plainScratch = s64.filter(r => r.c === "none");
+  const plainAny = base.filter(r => r.c === "none" && r.cat !== "PT");
+  const rA = rankIn(plainScratch);
+  const rB = rankIn(s64);
+  const rC = rankIn(plainAny);
+  const best = rB.top;
+  const lighter = s64.filter(r => r.p != null && r.p <= 3 && !r.you);
+  const items = [
+    { k: "Plain CNNs, from scratch, no teacher", v: `#${rA.pos} of ${rA.total}`, d: `Next best: ${[...plainScratch].sort((x,y)=>y.a-x.a).find(r=>!r.you).m}, ${fmt([...plainScratch].sort((x,y)=>y.a-x.a).find(r=>!r.you).a)}%` },
+    { k: "Plain CNNs incl. distilled", v: `#${rC.pos} of ${rC.total}`, d: `${rC.top.you ? "Top of the list" : rC.top.m + ", " + fmt(rC.top.a) + "%"}` },
+    { k: "All CNNs, from scratch at 64px", v: `#${rB.pos} of ${rB.total}`, d: `Best: ${best.m}, ${fmt(best.a)}% (${fmt(best.a - YOU)} pts)` },
+    { k: "From-scratch models ≤3M params with a reported count", v: `${lighter.length} others`, d: lighter.length ? `Best of them: ${lighter.sort((x,y)=>y.a-x.a)[0].m}, ${fmt(lighter[0].a)}%` : "None found" }
+  ];
+  const box = document.getElementById("stats");
+  box.textContent = "";
+  items.forEach(it => {
+    const s = el("div", "stat");
+    s.append(el("span", "k", it.k), el("span", "v", it.v), el("span", "d", it.d));
+    box.append(s);
+  });
+}
+
+function buildSeg(id, opts, key) {
+  const box = document.getElementById(id);
+  Object.entries(opts).forEach(([val, label]) => {
+    const b = el("button", null, label);
+    b.type = "button";
+    b.dataset.val = val;
+    b.setAttribute("aria-pressed", state[key] === val ? "true" : "false");
+    b.addEventListener("click", () => {
+      state[key] = val;
+      box.querySelectorAll("button").forEach(x => x.setAttribute("aria-pressed", x.dataset.val === val ? "true" : "false"));
+      render();
+    });
+    box.append(b);
+  });
+}
+
+function visible() {
+  const q = state.q.trim().toLowerCase();
+  return ROWS.filter(r => {
+    if (state.cat !== "all" && r.cat !== state.cat && !r.you) return false;
+    if (state.conn !== "all" && r.c !== state.conn && !r.you) return false;
+    if (state.hideEns && r.ens) return false;
+    if (state.hideLow && r.low) return false;
+    if (q && !r.you) {
+      const hay = (r.m + " " + r.rec + " " + r.srcLabel + " " + CONNS[r.c] + " " + CATS[r.cat]).toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function cmp(a, b, key) {
+  let x = a[key], y = b[key];
+  if (key === "r") { x = parseInt(a.r, 10); y = parseInt(b.r, 10); x = isNaN(x) ? null : x; y = isNaN(y) ? null : y; }
+  if (key === "c") { x = CONNS[a.c]; y = CONNS[b.c]; }
+  if (key === "cat") { x = CATS[a.cat]; y = CATS[b.cat]; }
+  if (key === "src") { x = a.srcLabel; y = b.srcLabel; }
+  if (x == null && y == null) return 0;
+  if (x == null) return 1;
+  if (y == null) return -1;
+  if (typeof x === "number") return (x - y) * state.sortDir;
+  return String(x).localeCompare(String(y)) * state.sortDir;
+}
+
+function render() {
+  const rows = visible();
+  const ranked = [...rows].sort((a, b) => b.a - a.a);
+  ranked.forEach((r, i) => { r.rank = i + 1; });
+  const key = state.sortKey === "rank" ? "a" : state.sortKey;
+  const dir = state.sortKey === "rank" ? -state.sortDir : state.sortDir;
+  const sorted = [...rows].sort((a, b) => {
+    const saved = state.sortDir; state.sortDir = dir;
+    const v = cmp(a, b, key) || (b.a - a.a);
+    state.sortDir = saved; return v;
+  });
+
+  const tb = document.getElementById("tbody");
+  tb.textContent = "";
+  const others = rows.filter(r => !r.you).length;
+  document.getElementById("count").textContent = `${others} published result${others === 1 ? "" : "s"} shown`;
+  if (!others) {
+    const tr = el("tr"); const td = el("td", "empty", "No published results match these filters. Clear the search or pick another training or connection filter.");
+    td.colSpan = 10; tr.append(td); tb.append(tr);
+  }
+  sorted.forEach(r => {
+    const tr = el("tr", r.you ? "you" : null);
+    tr.append(el("td", "num rank", String(r.rank)));
+
+    const tdM = el("td");
+    const name = el("span", "model", r.m);
+    tdM.append(name);
+    if (r.you) tdM.append(el("span", "tag you", "yours"));
+    if (r.ens) tdM.append(el("span", "tag", "ensemble"));
+    if (r.low) tdM.append(el("span", "tag", "?"));
+    if (r.n) tdM.append(el("span", "note", r.n));
+    tr.append(tdM);
+
+    const tdC = el("td"); tdC.append(el("span", "chip" + (r.c === "none" ? " none" : ""), CONNS[r.c])); tr.append(tdC);
+    tr.append(el("td", "num", r.p == null ? "—" : (r.p >= 10 ? r.p.toFixed(1) : r.p.toFixed(2))));
+    tr.append(el("td", "num", r.r));
+    tr.append(el("td", null, CATS[r.cat]));
+    const tdR = el("td"); tdR.append(el("div", "recipe", r.rec)); tr.append(tdR);
+
+    const tdA = el("td", "num");
+    const cell = el("div", "acc-cell");
+    const v = el("span", "acc-val", fmt(r.a, r.a % 1 === 0 ? 1 : 2));
+    const sp = el("span", null, " " + r.s); sp.style.color = "var(--muted)"; sp.style.fontSize = "11px"; v.append(sp);
+    const track = el("div", "track"); track.setAttribute("aria-hidden", "true");
+    const fill = el("div", "fill"); fill.style.width = r.a + "%";
+    const mark = el("div", "mark"); mark.style.left = `calc(${YOU}% - 1px)`;
+    track.append(fill, mark);
+    cell.append(v, track); tdA.append(cell); tr.append(tdA);
+
+    const tdD = el("td", "num");
+    if (r.you) tdD.textContent = "—";
+    else { tdD.textContent = (r.d > 0 ? "+" : "") + fmt(r.d); tdD.classList.add(r.d > 0 ? "neg" : "pos"); }
+    tdD.title = r.you ? "" : (r.d > 0 ? "Higher than your model" : "Lower than your model");
+    tr.append(tdD);
+
+    const tdS = el("td", "src");
+    if (r.k) {
+      const a = el("a", null, U[r.k][0]); a.href = U[r.k][1]; a.target = "_blank"; a.rel = "noopener"; tdS.append(a);
+      const urlLine = el("span", "src-url");
+      const ua = el("a", null, U[r.k][1].replace(/^https?:\/\//, "")); ua.href = U[r.k][1]; ua.target = "_blank"; ua.rel = "noopener";
+      urlLine.append(ua); tdS.append(urlLine);
+    }
+    else { tdS.textContent = "Your training log"; tdS.append(el("span", "src-url", "Attached notebook and metrics CSV")); }
+    tr.append(tdS);
+    tb.append(tr);
+  });
+
+  document.querySelectorAll("thead th button").forEach(b => {
+    const arrow = b.querySelector(".arrow");
+    if (b.dataset.key === state.sortKey) { arrow.textContent = state.sortDir === -1 ? "↓" : "↑"; b.parentElement.setAttribute("aria-sort", state.sortDir === -1 ? "descending" : "ascending"); }
+    else { arrow.textContent = ""; b.parentElement.removeAttribute("aria-sort"); }
+  });
+}
+
+buildSeg("seg-cat", Object.assign({ all: "All" }, CATS), "cat");
+buildSeg("seg-conn", Object.assign({ all: "All" }, CONNS), "conn");
+document.getElementById("q").addEventListener("input", e => { state.q = e.target.value; render(); });
+document.getElementById("hide-ens").addEventListener("change", e => { state.hideEns = e.target.checked; render(); });
+document.getElementById("hide-low").addEventListener("change", e => { state.hideLow = e.target.checked; render(); });
+document.querySelectorAll("thead th button").forEach(b => b.addEventListener("click", () => {
+  const k = b.dataset.key;
+  if (state.sortKey === k) state.sortDir = -state.sortDir;
+  else { state.sortKey = k; state.sortDir = (k === "a" || k === "p" || k === "d" || k === "r") ? -1 : 1; if (k === "rank") state.sortDir = 1; }
+  render();
+}));
+
+renderStats();
+render();
+</script>
+
+</body></html>

@@ -1,0 +1,14 @@
+level,total_units,inactive_units,rare_units,near_zero_gradient_units,inactive_and_low_gradient,rare_and_low_gradient
+level1_conv1,64,0,0,0,0,0
+level1_conv2,64,0,0,0,0,0
+level2_conv1,128,0,0,0,0,0
+level2_conv2,128,0,0,0,0,0
+level3_conv1,256,0,0,0,0,0
+level3_conv2,256,0,0,0,0,0
+level3_conv3,256,0,0,0,0,0
+level4_conv1,512,0,0,0,0,0
+level4_conv2,512,0,0,0,0,0
+level4_conv3,512,0,0,0,0,0
+global_pool,512,0,0,0,0,0
+dense_transition,512,0,0,0,0,0
+classifier,200,0,0,0,0,0

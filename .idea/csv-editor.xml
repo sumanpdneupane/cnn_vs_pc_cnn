@@ -3,49 +3,28 @@
   <component name="CsvFileAttributes">
     <option name="attributeMap">
       <map>
-        <entry key="/data/tiny_imagenet/cleaning/audit_summary.csv">
+        <entry key="/_05_cnn/33_mixup_cutmix_seed42_metrics.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
             </Attribute>
           </value>
         </entry>
-        <entry key="/data/tiny_imagenet/cleaning/cleaning_manifest.csv">
+        <entry key="/_05_cnn/39_resizemix50_seed42_metrics.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
             </Attribute>
           </value>
         </entry>
-        <entry key="/data/tiny_imagenet/cleaning/cleaning_summary.csv">
+        <entry key="/archive/z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/10_blockdrop015_025_metrics.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
             </Attribute>
           </value>
         </entry>
-        <entry key="/data/tiny_imagenet/cleaning/label_conflicts.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
-        <entry key="/data/tiny_imagenet/cleaning/leakage_verification.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
-        <entry key="/data/tiny_imagenet/cleaning/removal_reason_summary.csv">
-          <value>
-            <Attribute>
-              <option name="separator" value="," />
-            </Attribute>
-          </value>
-        </entry>
-        <entry key="/data/tiny_imagenet/cleaning/verification.csv">
+        <entry key="/archive/z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/11_blockdrop015_025_e150_metrics.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />
@@ -53,6 +32,41 @@
           </value>
         </entry>
         <entry key="/data/tiny_imagenet/tiny-imagenet-200-450train-100val/split_manifest.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/src/checkpoints/39_resizemix50_seed21/metrics.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/archive/_03_experiments_10_classes/checkpoints/cnn/39_resizemix50_seed42/metrics.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/archive/_03_experiments_10_classes/checkpoints/pc_cnn/39_resizemix50_seed42_bp/metrics.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/archive/_03_experiments_10_classes/checkpoints/pc_cnn_ep/39_resizemix50_seed42_ep/metrics.csv">
+          <value>
+            <Attribute>
+              <option name="separator" value="," />
+            </Attribute>
+          </value>
+        </entry>
+        <entry key="/archive/_03_experiments_10_classes/checkpoints/pc_cnn_top_down_rao_pcn/39_resizemix50_seed42/metrics.csv">
           <value>
             <Attribute>
               <option name="separator" value="," />

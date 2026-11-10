@@ -1,0 +1,2 @@
+validation_accuracy_pct,mean_confidence_pct,mean_logit,std_logit,mean_abs_logit,predicted_classes_used,total_classes
+66.6,55.198539600372314,0.00041291914232171256,1.0811914248781296,0.7581888929953137,200,200
