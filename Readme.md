@@ -7,9 +7,15 @@ pip install -r requirements.txt
 ## Data
 
 - **Tiny ImageNet** (200 classes, 64×64, 500 train + 50 val images per class), in `data/tiny_imagenet/tiny-imagenet-200` (val images sorted into one folder per class).
-- Experiments: all 200 classes in `experiments_in_seeds/` (checkpoints in `checkpoints/`). 10-class test runs: `archive/_03_experiments_10_classes/`.
 - Normalisation: mean/std of the Tiny ImageNet training set. Training augmentation: random crop (pad 4) + horizontal flip → ResizeMix on 50% of images → RandAugment (2 ops, magnitude 5). Validation: clean images.
 - Code: `src/dataset/`.
+- Experiments: all 200 classes in `experiments_in_seeds/` (checkpoints in `checkpoints/`). 10-class test runs: `archive/_03_experiments_10_classes/`.
+
+| Model | Experiments | Seeds |
+|---|---|---|
+| StandardCNN | `experiments_in_seeds/cnn/` | 42, 21, 84 |
+| HPCCNNTopDownRaoPCNExactLambda (the PC-CNN) | `experiments_in_seeds/pc_cnn_top_down_rao_pcn_exact_lambda/` | 42, 21, 84 |
+| PCCNN (EP, extra experiment) | `experiments_in_seeds/pc_cnn_ep/` | 42 |
 
 | Used for | Paper |
 |---|---|
@@ -54,9 +60,9 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 | Label smoothing | Szegedy et al. (2016) — https://arxiv.org/abs/1512.00567 |
 | Cosine schedule | Loshchilov & Hutter (2017), SGDR — https://arxiv.org/abs/1608.03983 |
 
-## HPCCNNTopDownRaoPCN
+## HPCCNNTopDownRaoPCNExactLambda (the PC-CNN)
 
-`src/model/pc_cnn_top_down_rao_pcn.py` (class `HPCCNNTopDownRaoPCN`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
+`src/model/pc_cnn_top_down_rao_pcn_exact_lambda.py` (class `HPCCNNTopDownRaoPCNExactLambda`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
 
 - Cycle 0 = one feedforward pass (= the Standard CNN). Then **7 cycles**, in training and at test:
   1. **Top-down:** each layer predicts the layer below, p = Wᵀr, and the layer moves toward the prediction.
@@ -79,7 +85,7 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 **Extra compared with the Standard CNN**
 - **Parameters:** only the rates, 2,368 (a = bottom-up step per channel of r1..r8, b = top-down step per channel of r1..r7). Total 2,712,744.
 - **Top-down predictions:** no new weights (the transposed conv of the same conv).
-- **Not learned (buffers):** λ per layer (top eigenvalue of WWᵀ, sets the step a/λ) and its 8 power-iteration vectors.
+- **Not learned (buffers):** λ per layer (top eigenvalue of WᵀW with the BatchNorm scale included, sets the step a/λ) and its 8 power-iteration vectors.
 - **Compute:** 7 inference steps (cycles) after the feedforward pass, in training and at test. Each step = one top-down + one bottom-up sweep through all 8 convs.
 - **Training:** the same loss, optimizer and schedule; backprop runs through all cycles. Hidden dropout uses one mask for all cycles.
 
@@ -88,3 +94,37 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 | Top-down predictions, bottom-up errors, tied weights | Rao & Ballard (1999), *Predictive coding in the visual cortex*, Nature Neuroscience — https://doi.org/10.1038/4580 |
 | Cycle schedule, update rates, training through the cycles | Wen et al. (2018), *Deep Predictive Coding Network for Object Recognition*, ICML — https://arxiv.org/abs/1802.04762 |
 | Same dropout mask in every cycle | Gal & Ghahramani (2016), *A Theoretically Grounded Application of Dropout in Recurrent Neural Networks* — https://arxiv.org/abs/1512.05287 |
+
+## PCCNN (EP, extra experiment)
+
+`src/model/pc_cnn_ep.py` (class `PCCNN`). The Standard CNN with its weights learned by centered Equilibrium Propagation: local updates, no backprop. One seed.
+
+- Each batch: free phase (one feedforward pass), then the output is nudged toward the label (+β and −β, β = 0.01). 10 sweeps spread the prediction errors e = state − f(state below) down the layers, and each weight is updated from its local error × input.
+- At test: one feedforward pass, like the Standard CNN.
+- Difference from the PC-CNN: here predictive coding is the learning rule. In the PC-CNN it is the inference (7 cycles at test).
+
+| Used for | Paper |
+|---|---|
+| Predictive coding as learning | Whittington & Bogacz (2017), *Neural Computation* — https://doi.org/10.1162/NECO_a_00949 |
+| Equilibrium Propagation | Scellier & Bengio (2017), *Frontiers in Computational Neuroscience* — https://doi.org/10.3389/fncom.2017.00024 |
+| Centered EP (+β and −β) | Laborieux et al. (2021), *Frontiers in Neuroscience* — https://doi.org/10.3389/fnins.2021.633674 |
+
+## Evaluation (to do, after training)
+
+Every final checkpoint (epoch 100, `latest_checkpoint.pth`, not `best_model.pth`), all seeds, on the 10,000 validation images.
+
+- **Noise, at test only:** Gaussian (standard deviation) and salt-and-pepper (proportion of pixels set to the minimum or maximum) at 0.05, 0.1, 0.2, 0.3 and 0.5. Added in pixel range [0, 1], then clipped, then normalised. The same noisy images for every model.
+- **Clean metrics:** accuracy, loss, confusion matrix, precision, recall, F1.
+- **Robustness metrics:** accuracy drop, loss increase, RRR (noisy / clean accuracy), CE and mCE (Standard CNN as reference), ECE.
+- **Statistics:** paired by seed (CNN 42 vs PC-CNN 42, and so on): paired t-test, Wilcoxon, 95% confidence intervals. With 3 seeds these are weak on their own (Wilcoxon's smallest possible p is 0.25), so also McNemar on the 10,000 images and bootstrap confidence intervals, for each seed pair.
+- **Compute cost:** inference time, GPU memory, FLOPs, training time. Measured only when no training is running.
+- Tables use all seeds (mean ± SD). Figures for one model (confusion matrix, examples) use seed 42. EP has one seed, so it is descriptive only.
+
+| Used for | Paper |
+|---|---|
+| CE, mCE | Hendrycks & Dietterich (2019), *Benchmarking Neural Network Robustness to Common Corruptions and Perturbations* — https://arxiv.org/abs/1903.12261 |
+| ECE | Guo et al. (2017), *On Calibration of Modern Neural Networks* — https://arxiv.org/abs/1706.04599 |
+| McNemar test | McNemar (1947), *Psychometrika* — https://doi.org/10.1007/BF02295996; Dietterich (1998), *Neural Computation* — https://doi.org/10.1162/089976698300017197 |
+| Wilcoxon signed-rank test | Wilcoxon (1945), *Biometrics Bulletin* — https://doi.org/10.2307/3001968 |
+| Bootstrap confidence intervals | Efron (1979), *The Annals of Statistics* — https://doi.org/10.1214/aos/1176344552 |
+
