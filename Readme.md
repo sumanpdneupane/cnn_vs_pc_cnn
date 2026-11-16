@@ -14,8 +14,8 @@ pip install -r requirements.txt
 | Model | Experiments | Seeds |
 |---|---|---|
 | StandardCNN | `experiments_in_seeds/cnn/` | 42, 21, 84 |
-| HPCCNNTopDownRaoPCNExactLambda (the PC-CNN) | `experiments_in_seeds/pc_cnn_top_down_rao_pcn_exact_lambda/` | 42, 21, 84 |
-| PCCNN (EP, extra experiment) | `experiments_in_seeds/pc_cnn_ep/` | 42 |
+| HPCCNNRaoV2 (the PC-CNN) | `experiments_in_seeds/hpc_cnn_rao_v2/` | 42, 21, 84 |
+| PCCNNEP (EP, extra experiment) | `experiments_in_seeds/pc_cnn_ep/` | 42 |
 
 | Used for | Paper |
 |---|---|
@@ -60,9 +60,9 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 | Label smoothing | Szegedy et al. (2016) — https://arxiv.org/abs/1512.00567 |
 | Cosine schedule | Loshchilov & Hutter (2017), SGDR — https://arxiv.org/abs/1608.03983 |
 
-## HPCCNNTopDownRaoPCNExactLambda (the PC-CNN)
+## HPCCNNRaoV2 (the PC-CNN)
 
-`src/model/pc_cnn_top_down_rao_pcn_exact_lambda.py` (class `HPCCNNTopDownRaoPCNExactLambda`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
+`src/model/hpc_cnn_rao_v2.py` (class `HPCCNNRaoV2`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
 
 - Cycle 0 = one feedforward pass (= the Standard CNN). Then **7 cycles**, in training and at test:
   1. **Top-down:** each layer predicts the layer below, p = Wᵀr, and the layer moves toward the prediction.
@@ -95,9 +95,9 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 | Cycle schedule, update rates, training through the cycles | Wen et al. (2018), *Deep Predictive Coding Network for Object Recognition*, ICML — https://arxiv.org/abs/1802.04762 |
 | Same dropout mask in every cycle | Gal & Ghahramani (2016), *A Theoretically Grounded Application of Dropout in Recurrent Neural Networks* — https://arxiv.org/abs/1512.05287 |
 
-## PCCNN (EP, extra experiment)
+## PCCNNEP (EP, extra experiment)
 
-`src/model/pc_cnn_ep.py` (class `PCCNN`). The Standard CNN with its weights learned by centered Equilibrium Propagation: local updates, no backprop. One seed.
+`src/model/pc_cnn_ep.py` (class `PCCNNEP`). The Standard CNN with its weights learned by centered Equilibrium Propagation: local updates, no backprop. One seed.
 
 - Each batch: free phase (one feedforward pass), then the output is nudged toward the label (+β and −β, β = 0.01). 10 sweeps spread the prediction errors e = state − f(state below) down the layers, and each weight is updated from its local error × input.
 - At test: one feedforward pass, like the Standard CNN.

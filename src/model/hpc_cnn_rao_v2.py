@@ -4,7 +4,7 @@ from torch import nn
 
 from src.model.cnn import StandardCNN
 
-# HPCCNNTopDownRaoPCN: the Standard CNN + predictive coding at every conv layer.
+# HPCCNNRaoV2: the Standard CNN + predictive coding at every conv layer.
 # Rao & Ballard (1999), https://doi.org/10.1038/4580: tied weights, top-down predictions, bottom-up errors.
 # Wen et al. (2018), https://arxiv.org/abs/1802.04762: cycle schedule, learned rates, backprop through the cycles.
 # Gal & Ghahramani (2016), https://arxiv.org/abs/1512.05287: the same dropout mask in every cycle.
@@ -17,8 +17,8 @@ from src.model.cnn import StandardCNN
 #   2. bottom-up   l = 1..8: e_l-1 = r_l-1 - p_l-1      r_l   <- phi(r_l + (a / lambda) W_l e_l-1) (Wen Eq. 10)
 #   The bottom-up step is gradient descent on ||r_l-1 - W_l^T r_l||^2 (Rao & Ballard). Class read from r8 at the end.
 #
-# RATES       a, b learned per channel (start 1.0, 0.5 as in PCN). lambda = top eigenvalue of W W^T (power iteration),
-#             so a = 1 is a stable step with BatchNorm.
+# RATES       a, b learned per channel (start 1.0, 0.5 as in PCN). lambda = top eigenvalue of W^T W = conv^T S^2 conv
+#             (S = BatchNorm scale, power iteration), so a = 1 is a stable step with BatchNorm.
 # TRAINING    7 cycles in training and at test; all weights by backprop through the cycles. BatchNorm runs only in
 #             cycle 0; the cycles use its scale gamma / running sigma.
 # DROPOUT     As the Standard CNN (0.15 after r6, 0.25 after r8, dense 0.35), training only. One mask per batch, used in
@@ -63,7 +63,7 @@ class ConvLayer:
         return F.conv_transpose2d(x, self.conv.weight, None, padding=self.conv.padding, dilation=self.conv.dilation)
 
 
-class HPCCNNTopDownRaoPCN(StandardCNN):
+class HPCCNNRaoV2(StandardCNN):
     training_method = 'bp'
     top_down_inference = True  # False: one-pass ablation at test
     slope = 0.05  # LeakyReLU slope (phi), as in the Standard CNN
@@ -203,7 +203,8 @@ class HPCCNNTopDownRaoPCN(StandardCNN):
 
     # =============================== lambda (step size) ===============================
 
-    # lambda_l = top eigenvalue of W_l W_l^T by power iteration (5 per batch, 300 the first time)
+    # lambda_l = top eigenvalue of W_l^T W_l (without the pooling: an upper bound) by power iteration
+    # (5 per batch, 300 the first time). W^T W v uses the same W and W^T as the cycles.
     @torch.no_grad()
     def update_top_down_curvature(self, iterations=5):
         if not bool((self.top_down_curvature > 0).all()):
@@ -211,7 +212,7 @@ class HPCCNNTopDownRaoPCN(StandardCNN):
         for l, layer in enumerate(self.conv_layers, start=1):
             vector = getattr(self, f'power_vector_{l}')
             for _ in range(iterations):
-                vector = layer.transposed_conv(layer.send_up(vector))
+                vector = layer.predict_down(layer.send_up(vector), None, None)
                 eigenvalue = vector.norm()
                 vector = vector / eigenvalue
             getattr(self, f'power_vector_{l}').copy_(vector)

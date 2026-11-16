@@ -14,7 +14,7 @@ class TrainModel:
         if method not in ('bp', 'ep'):
             raise ValueError(f"method must be 'bp' or 'ep', got {method!r}")
         if method == 'ep' and not hasattr(model, 'ep_gradients'):
-            raise ValueError(f"{type(model).__name__} cannot be trained with EP; use PCCNN for method='ep'")
+            raise ValueError(f"{type(model).__name__} cannot be trained with EP; use PCCNNEP for method='ep'")
         self.model, self.optimizer, self.scheduler = model, optimizer, scheduler
         self.criterion, self.device, self.method, self.clip = criterion, device, method, clip
         self.per_image_loss = nn.CrossEntropyLoss(label_smoothing=criterion.label_smoothing, reduction='none')

@@ -6,7 +6,7 @@ from torch import nn
 
 from src.model.cnn import StandardCNN
 
-# PCCNN: the StandardCNN trained with centered Equilibrium Propagation (local updates, no backprop).
+# PCCNNEP: the StandardCNN trained with centered Equilibrium Propagation (local updates, no backprop).
 # Papers: https://doi.org/10.1162/NECO_a_00949 (Whittington & Bogacz 2017, predictive coding)
 #         https://doi.org/10.3389/fncom.2017.00024 (Scellier & Bengio 2017, EP)
 #         https://doi.org/10.3389/fnins.2021.633674 (Laborieux et al. 2021, centered EP)
@@ -29,7 +29,7 @@ LayerPass = namedtuple('LayerPass', [
 ])
 
 
-class PCCNN(StandardCNN):
+class PCCNNEP(StandardCNN):
     training_method = 'ep'  # default for TrainModel: centered EP (method='bp' still allowed, e.g. as a check)
 
     def __init__(self, num_classes=200, block3_dropout=0.15, block4_dropout=0.25, classifier_dropout=0.35,

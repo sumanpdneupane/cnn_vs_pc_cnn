@@ -4,10 +4,7 @@ from torch import nn
 
 from src.model.cnn import StandardCNN
 
-# HPCCNNTopDownRaoPCNExactLambda: the Standard CNN + predictive coding at every conv layer.
-# Same as HPCCNNTopDownRaoPCN (pc_cnn_top_down_rao_pcn.py) with one fix: lambda is the top eigenvalue of the real
-# W^T W = conv^T S^2 conv (S = BatchNorm scale). The old version used conv^T S conv (S once), so its step a / lambda
-# was 0.3-2.3x off per layer.
+# HPCCNNRaoV1: the Standard CNN + predictive coding at every conv layer.
 # Rao & Ballard (1999), https://doi.org/10.1038/4580: tied weights, top-down predictions, bottom-up errors.
 # Wen et al. (2018), https://arxiv.org/abs/1802.04762: cycle schedule, learned rates, backprop through the cycles.
 # Gal & Ghahramani (2016), https://arxiv.org/abs/1512.05287: the same dropout mask in every cycle.
@@ -66,7 +63,7 @@ class ConvLayer:
         return F.conv_transpose2d(x, self.conv.weight, None, padding=self.conv.padding, dilation=self.conv.dilation)
 
 
-class HPCCNNTopDownRaoPCNExactLambda(StandardCNN):
+class HPCCNNRaoV1(StandardCNN):
     training_method = 'bp'
     top_down_inference = True  # False: one-pass ablation at test
     slope = 0.05  # LeakyReLU slope (phi), as in the Standard CNN
@@ -206,8 +203,7 @@ class HPCCNNTopDownRaoPCNExactLambda(StandardCNN):
 
     # =============================== lambda (step size) ===============================
 
-    # lambda_l = top eigenvalue of W_l^T W_l (without the pooling: an upper bound) by power iteration
-    # (5 per batch, 300 the first time). W^T W v uses the same W and W^T as the cycles.
+    # lambda_l = top eigenvalue of W_l W_l^T by power iteration (5 per batch, 300 the first time)
     @torch.no_grad()
     def update_top_down_curvature(self, iterations=5):
         if not bool((self.top_down_curvature > 0).all()):
@@ -215,7 +211,7 @@ class HPCCNNTopDownRaoPCNExactLambda(StandardCNN):
         for l, layer in enumerate(self.conv_layers, start=1):
             vector = getattr(self, f'power_vector_{l}')
             for _ in range(iterations):
-                vector = layer.predict_down(layer.send_up(vector), None, None)
+                vector = layer.transposed_conv(layer.send_up(vector))
                 eigenvalue = vector.norm()
                 vector = vector / eigenvalue
             getattr(self, f'power_vector_{l}').copy_(vector)
