@@ -143,9 +143,7 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 
 **Extra compared with the Standard CNN**
 - **Parameters:** only the rates, 2,368 (a = bottom-up step per channel of r1..r8, b = top-down step per channel of r1..r7). Total 2,712,744.
-- **Top-down predictions:** no new weights (the transposed conv of the same conv).
 - **Not learned (buffers):** λ per layer (top eigenvalue of WᵀW with the BatchNorm scale included, sets the step a/λ) and its 8 power-iteration vectors.
-- **Compute:** 7 inference steps (cycles) after the feedforward pass, in training and at test. Each step = one top-down + one bottom-up sweep through all 8 convs.
 - **Training:** the same loss, optimizer and schedule; backprop runs through all cycles. Hidden dropout uses one mask for all cycles.
 
 | Used for | Paper |
@@ -192,7 +190,7 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 | Images | all 500 train + 50 val per class, 200 classes (100,000 + 10,000) | The full dataset; the seed does not change which images are used. |
 | Normalisation | mean (R, G, B) = 0.4802, 0.4481, 0.3975; std (R, G, B) = 0.2764, 0.2689, 0.2816 | Computed on the Tiny ImageNet training set (`src/utils/utils.py`). The same for training, validation and test, in every model. |
 | Batch size | 64 | The same for all models. |
-| Epochs | 100 | Cosine learning-rate schedule down to 1e-5 over the 100 epochs. Long enough to converge; 150 epochs cost 1.5× the time for a small gain (see Why 100 epochs, in StandardCNN Selection below). |
+| Epochs | 100 | Cosine learning-rate schedule down to 1e-5 over the 100 epochs. Long enough to converge; 150 epochs cost 1.5× the time for a small gain (see StandardCNN Selection below). |
 | Data-loader workers | 4 | Fastest in our test (`00_mac_worker_test.ipynb`, 11-core M3 Pro): 0 / 2 / 4 / 6 / 8 workers = 35 / 54 / 66 / 58 / 49 batches per second. |
 | Clean-train check | epoch 1, then every 5 epochs | Accuracy on the training images without augmentation, to watch overfitting. Not every epoch because it costs time. |
 | Checkpoints | `latest_checkpoint.pth` every epoch, `best_model.pth` at the best val accuracy | `latest` stores everything to resume exactly (weights, optimizer, schedule, random states). Evaluation uses `best_model.pth`. |
@@ -248,37 +246,33 @@ The columns (also used in Model Size and Augmentation Selection):
 - **Clean train:** accuracy on the training images without augmentation, last epoch.
 - **Gap:** clean train − val at the last epoch, in percentage points. A large gap means overfitting.
 
-**1. Architecture.** Each step changes the model; the b rows keep the model and add mixing. The Training column shows the mixing used.
+**1. Architecture.** Each row changes the model; rows with "the same" keep the model and add mixing. The Training column shows the mixing used. Notebook = folder number / file in `archive/_01_z_cnn/` (click to open):
 
-| Step | Model (folder) | Training | Parameters | Val (%) | Aug. train (%) | Clean train (%) | Gap (pp) | What we learned |
+| Notebook | Model | Training | Parameters | Val (%) | Aug. train (%) | Clean train (%) | Gap (pp) | What we learned |
 |---|---|---|---|---|---|---|---|---|
-| 1 | 4 convs, one per level, flatten → FC (`_01_cnn_single_layer`) | no mixing | 5.93M | 55.17 | 56.82 | 78.78 | 23.56 | Too shallow |
-| 2 | 8 convs, two per level, flatten → FC (`_02_cnn_double_layer`) | no mixing | 9.07M | 60.66 | 80.67 | 95.00 | 34.34 | Two convs per level: +5.5 points, but strong overfitting |
-| 2b | the same | 25% clean, 37.5% MixUp, 37.5% CutMix | 9.07M | 62.24 | 57.23 | 86.12 | 23.94 | Mixing: +1.6 points, gap 34 → 24 |
-| 3 | 8 convs + global average pooling (`_03_cnn_double_layer_gap`) | no mixing | 4.87M | 60.79 | **88.80** | **97.89** | 37.16 | GAP: the same val with half the parameters |
-| 3b | the same + block dropout 0.05 / 0.10 | 25% clean, 37.5% MixUp, 37.5% CutMix | 4.87M | 63.91 | 57.48 | 86.45 | 22.67 | Mixing + dropout: +3.1 points, gap 37 → 23 |
-| 4 | 10 convs (2-2-3-3) + GAP + dense 512 (`_04_cnn_double_gap_2level_with_3layer_parameter`, run 01) | 25% clean, 37.5% MixUp, 37.5% CutMix | 8.00M | **65.47** | 70.23 | 97.62 | 32.25 | Deeper + dense layer: +1.6 points; the training settings were tested on this model (table 2) |
-| 5 | **8 convs, 2.7M (final, `_05_cnn`, run 39)** | ResizeMix on 50% of images | **2.71M** | 64.07 | 56.13 | 83.27 | **19.12** | 3× fewer parameters, less overfitting; chosen for cost (see Model Size and Computation Cost below) |
+| [_01/01_clean.ipynb](archive/_01_z_cnn/_01_cnn_single_layer/01_clean.ipynb) | 4 convs, one per level, flatten → FC | no mixing | 5.93M | 55.17 | 56.82 | 78.78 | 23.56 | Too shallow |
+| [_02/01_clean.ipynb](archive/_01_z_cnn/_02_cnn_double_layer/01_clean.ipynb) | 8 convs, two per level, flatten → FC | no mixing | 9.07M | 60.66 | 80.67 | 95.00 | 34.34 | Two convs per level: +5.5 points, but strong overfitting |
+| [_02/04_clean25_mixup375_cutmix375.ipynb](archive/_01_z_cnn/_02_cnn_double_layer/04_clean25_mixup375_cutmix375.ipynb) | the same | 25% clean, 37.5% MixUp, 37.5% CutMix | 9.07M | 62.24 | 57.23 | 86.12 | 23.94 | Mixing: +1.6 points, gap 34 → 24 |
+| [_03/01_clean.ipynb](archive/_01_z_cnn/_03_cnn_double_layer_gap/01_clean.ipynb) | 8 convs + global average pooling | no mixing | 4.87M | 60.79 | **88.80** | **97.89** | 37.16 | GAP: the same val with half the parameters |
+| [_03/02_clean25_mixup375_cutmix375_drop.ipynb](archive/_01_z_cnn/_03_cnn_double_layer_gap/02_clean25_mixup375_cutmix375_drop.ipynb) | the same + block dropout 0.05 / 0.10 | 25% clean, 37.5% MixUp, 37.5% CutMix | 4.87M | 63.91 | 57.48 | 86.45 | 22.67 | Mixing + dropout: +3.1 points, gap 37 → 23 |
+| [_04/01_split450_rand3_7.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/01_split450_rand3_7.ipynb) | 10 convs (2-2-3-3) + GAP + dense 512 | 25% clean, 37.5% MixUp, 37.5% CutMix | 8.00M | **65.47** | 70.23 | 97.62 | 32.25 | Deeper + dense layer: +1.6 points; the training settings were tested on this model (table 2) |
+| [_05/39_resizemix50_seed42.ipynb](archive/_01_z_cnn/_05_cnn/39_resizemix50_seed42.ipynb) | **8 convs, 2.7M (final)** | ResizeMix on 50% of images | **2.71M** | 64.07 | 56.13 | 83.27 | **19.12** | 3× fewer parameters, less overfitting; chosen for cost (see Model Size and Computation Cost below) |
 
-Steps 1–4 used 450 train / 100 val images per class (from run 02 on: the official 500 / 50), so step 5 is not exactly comparable with them. Steps 1–4 used RandAugment (3, 7), label smoothing 0.1, SGD lr 0.05, weight decay 1e-4, and classifier dropout 0.5 (steps 1–3) or 0.2 (step 4).
+All rows except the final model used 450 train / 100 val images per class (from run 02 on: the official 500 / 50), so the final model is not exactly comparable with them. They used RandAugment (3, 7), label smoothing 0.1, SGD lr 0.05, weight decay 1e-4, and classifier dropout 0.5 (4- and 8-conv models) or 0.2 (10-conv model).
 
-**2. Training settings**, tested on the 10-conv model (step 4), one change per run:
+**2. Training settings**, tested on the 10-conv model, one change per run. Only the runs behind a decision; notebooks in `archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/` (click to open):
 
-| Run | Change | Val (%) | Aug. train (%) | Clean train (%) | Gap (pp) |
+| Notebook | Change | Val (%) | Aug. train (%) | Clean train (%) | Gap (pp) |
 |---|---|---|---|---|---|
-| 01 | 450 train / 100 val images per class, RandAugment (3, 7) | 65.47 | 70.23 | 97.62 | 32.25 |
-| 02 | official 500 / 50 split | 66.50 | 70.31 | 97.22 | 30.62 |
-| 03 | RandAugment (2, 5) instead of (3, 7) | 66.71 | 73.40 | 98.40 | 31.53 |
-| 04 | label smoothing 0.05 instead of 0.1 | 66.18 | 73.32 | 98.64 | 32.51 |
-| 05 | weight decay 1e-5 instead of 1e-4 | 64.26 | 70.67 | 98.14 | 33.93 |
-| 08 | from 03: no block dropout (instead of 0.05 / 0.10) and classifier dropout 0.35 (instead of 0.2, kept from here on) | 65.89 | **76.29** | **99.16** | 33.24 |
-| 09 | block dropout 0.10 / 0.20 | 67.09 | 68.62 | 95.19 | 28.09 |
-| 10 | block dropout 0.15 / 0.25 | 66.03 | 64.84 | 92.45 | 26.39 |
-| 12 | block dropout 0.20 / 0.30 | 66.45 | 63.33 | 90.57 | 24.07 |
-| 11 | 10 with 150 epochs | **67.79** | 68.96 | 96.67 | 28.75 |
-| 13 | 10 with AdamW (lr 0.001, weight decay 0.01) | 62.85 | 60.96 | 90.44 | 27.29 |
-| 14 | 10 with LAMB (lr 0.001, weight decay 0.01) | 63.50 | 59.65 | 88.76 | 25.24 |
-| 15 | 10 with weight decay 5e-4 | 67.18 | 62.65 | 88.07 | **20.83** |
+| [01_split450_rand3_7.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/01_split450_rand3_7.ipynb) | 450 train / 100 val images per class, RandAugment (3, 7) | 65.47 | 70.23 | 97.62 | 32.25 |
+| [02_rand3_7.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/02_rand3_7.ipynb) | official 500 / 50 split | 66.50 | 70.31 | 97.22 | 30.62 |
+| [03_rand2_5.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/03_rand2_5.ipynb) | RandAugment (2, 5) instead of (3, 7) | 66.71 | **73.40** | **98.40** | 31.53 |
+| [05_wd1e5.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/05_wd1e5.ipynb) | weight decay 1e-5 instead of 1e-4 | 64.26 | 70.67 | 98.14 | 33.93 |
+| [10_blockdrop015_025.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/10_blockdrop015_025.ipynb) | from 03: block dropout 0.15 / 0.25 (instead of 0.05 / 0.10) and classifier dropout 0.35 (instead of 0.2) | 66.03 | 64.84 | 92.45 | 26.39 |
+| [12_blockdrop020_030.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/12_blockdrop020_030.ipynb) | block dropout 0.20 / 0.30 | 66.45 | 63.33 | 90.57 | **24.07** |
+| [11_blockdrop015_025_e150.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/11_blockdrop015_025_e150.ipynb) | 10 with 150 epochs | **67.79** | 68.96 | 96.67 | 28.75 |
+| [13_adamw.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/13_adamw.ipynb) | 10 with AdamW (lr 0.001, weight decay 0.01) | 62.85 | 60.96 | 90.44 | 27.29 |
+| [14_lamb.ipynb](archive/_01_z_cnn/_04_cnn_double_gap_2level_with_3layer_parameter/14_lamb.ipynb) | 10 with LAMB (lr 0.001, weight decay 0.01) | 63.50 | 59.65 | 88.76 | 25.24 |
 
 **What was kept and why:**
 
@@ -289,19 +283,10 @@ Steps 1–4 used 450 train / 100 val images per class (from run 02 on: the offic
 | Label smoothing | 0.1 | 0.05 was 0.5 lower. |
 | Optimizer | SGD, Nesterov, momentum 0.9 | AdamW and LAMB were 2.5–3.2 points lower. |
 | Learning rate | 0.05, cosine down to 1e-5 | Not tuned separately. |
-| Weight decay | 1e-4 | 1e-5 was 2.5 lower. 5e-4 was the best on the 8M model (+1.2), but it did not help on the 2.7M model in our test. |
-| Dropout | Dropout2d 0.15 / 0.25 after levels 3 / 4, dense 0.35 | Without block dropout the gap is the largest of these runs (33.2). All dropout levels ended within about 1 point; 0.15 / 0.25 was the base of the later runs (11, 13, 14, 15). |
-| Epochs | 100 | Enough to converge with the cosine schedule; 150 gave +1.8 for 1.5× the time (see Why 100 epochs, next). |
+| Weight decay | 1e-4 | 1e-5 was 2.5 lower. 5e-4 was the best on the 8M model (run 15: 67.18, +1.2), but it did not help on the 2.7M model in our test. |
+| Dropout | Dropout2d 0.15 / 0.25 after levels 3 / 4, dense 0.35 | Without block dropout (run 08: 65.89) the gap is the largest (33.2). All dropout levels ended within about 1 point (0.10 / 0.20, run 09: 67.09); 0.15 / 0.25 was the base of the later runs (11, 13, 14, 15). |
+| Epochs | 100 | Converged by epoch 100: in the final runs the last 10 epochs add only +0.4 to +0.9 points. 150 epochs gave +1.8 on the 8M model for 1.5× the time (PC-CNN: about 114 h instead of 76 h per seed). Shorter runs mislead: run 15 was 10.9 points behind run 10 at epoch 50 but ended 1.2 higher. |
 | Batch size | 64 | Not tuned. |
-
-**Why 100 epochs:**
-
-| Reason | Evidence | Meaning |
-|---|---|---|
-| Shorter runs are misleading | Run 15 (weight decay 5e-4) was 10.9 points behind run 10 at epoch 50 (46.39 vs 57.31), but ended 1.2 points higher (67.18 vs 66.03). | Strongly regularised runs gain most at the end, when the cosine learning rate is small. So every run must finish the full schedule before it is judged. |
-| 100 epochs is enough | In the final runs (StandardCNN seeds 42, 21, 84; HPCCNNRaoV2 seeds 42, 21) the last 10 epochs add only +0.4 to +0.9 points (mean of epochs 86–90 → 96–100), and the learning rate ends at 1e-5. | Training has settled by epoch 100. |
-| 150 epochs: small gain, large cost | 8M model: +1.8 points (run 10: 66.03 → run 11: 67.79), for 1.5× the time. | For the PC-CNN that is about 114 h instead of 76 h per seed; all planned runs about 21 days instead of 14. |
-| The same for every model | All models train for 100 epochs with the same schedule. | The comparison is fair. |
 
 | Used for | Paper |
 |---|---|
@@ -317,7 +302,7 @@ Steps 1–4 used 450 train / 100 val images per class (from run 02 on: the offic
 
 **Why a small model (2.7M parameters) and not the 8M model or a higher-parameter model**
 
-An earlier Standard CNN had 8.0M parameters (10 convs, step 4 in StandardCNN Selection above). We compared it with the 2.7M model (8 convs) that is used for all experiments.
+An earlier Standard CNN had 8.0M parameters (the 10-conv model in StandardCNN Selection above). We compared it with the 2.7M model (8 convs) that is used for all experiments.
 
 **The two models** (seed 42, 100 epochs, 200 classes; columns as in StandardCNN Selection above):
 
@@ -342,7 +327,7 @@ Compute: 1 MAC = one multiply-add = 2 FLOPs; conv and linear layers only, for on
 | Reason | Explanation |
 |---|---|
 | Training time | The PC-CNN runs 7 extra cycles through every conv and EP runs many inference steps per batch, so both get slower as the CNN gets bigger. About 38 days of training was too long before the thesis deadline; about 14 days fits. |
-| Less overfitting | The 8M model is 2 points better on validation, but its gap is 7 points bigger (26.39 vs 19.12), even though it mixed more (75% of batches vs 50% of images). Most of its extra fit on the training images (+9 points) does not carry over to validation (+2 points). With weight decay 5e-4 (run 15) its gap falls to 20.83, still above 19.12. |
+| Less overfitting | The 8M model is 2 points better on validation but overfits more: gap 26.39 vs 19.12 (20.83 even with weight decay 5e-4, run 15), although it mixed more (75% of batches vs 50% of images). |
 | The question is relative | The thesis asks how the CNN and the PC-CNN differ in robustness to noise (which one is more robust), with the same backbone. That comparison is fair at any size, so the 8M model's 2 extra points of clean accuracy are not needed. |
 
 **Limitation.** All results are for this 2.7M-parameter model. Whether the robustness difference between the CNN and the PC-CNN changes with model size is not tested here (future work).
@@ -375,39 +360,7 @@ Aug. train is below val because mixed images are harder (two images, split label
 | **39 ResizeMix 50%** | **64.07** | 63.52 | **63.84** | **63.81 ± 0.28** |
 | Difference (39 − 33) | +0.19 | −0.10 | +0.48 | +0.19 ± 0.29 |
 
-- **Accuracy: a tie.** 39 is 0.19 points higher on average, but not on every seed (seed 21: −0.10). Paired t-test on the 3 differences (same seed = same start weights and images):
-  1. If 33 and 39 were equal, the 3 differences would only be noise around 0, and t would follow a t-distribution with 2 degrees of freedom (3 seeds − 1).
-  2. Our t = mean difference / (SD / √3) = 0.19 / (0.29 / √3) = 1.1.
-  3. p = the area of that distribution beyond −1.1 and +1.1 (two-sided: any difference, not only "39 better"). For 2 degrees of freedom: p = 1 − t / √(2 + t²) = 1 − 1.11 / 1.80 = 0.38 (from the exact accuracies; the rounded table values give 0.37).
-  4. p = 0.38: if the recipes were equal, a gap at least this large would still appear in 38 of 100 repeats. A real difference needs p < 0.05 (with 3 seeds: t above 4.3).
-
-  ```
-                t-distribution, 2 degrees of freedom
-                           ___
-                         /     \
-                       /         \
-       ░░░░░░░░░░░░░ /             \ ░░░░░░░░░░░░░
-    ───────────────|───────0───────|───────────────
-                 −1.11           +1.11
-     left tail = 0.19              right tail = 0.19
-                  p = 0.19 + 0.19 = 0.38
-  ```
-- **So 39 was kept because it is simpler** (one mixing method instead of two) and used for all models. Box-aware mixing and zoom gave nothing extra.
-
-**Settings of every run.** What each run did before, during and after mixing.
-- The same in all runs: horizontal flip (p = 0.5), RandAugment (2 ops, magnitude 5), normalisation (mean/std from Settings), label smoothing 0.1, clean validation images.
-- Crop = RandomCrop 64, padding 4 (reflect).
-- Box-aware runs (61, 62, 63) use the Tiny ImageNet training boxes (training only) and paste on the better of 2 random spots: the one that covers less of this image's object.
-
-| Run | Before mixing | Mixing | After mixing |
-|---|---|---|---|
-| 33 | crop, flip, RandAugment | per batch: 50% clean, 25% MixUp (α = 0.2), 25% CutMix (α = 1.0) | – |
-| 38 | crop, flip | ResizeMix on every image, τ ~ U(0.1, 0.8) | RandAugment |
-| **39** | **crop, flip** | **ResizeMix on 50% of images, τ ~ U(0.1, 0.8)** | **RandAugment** |
-| 60 | pad 24 (reflect), RandAugment (shifts sized for 64 px), zoom 0.8–1.2 on 50%, shift ±4 px, centre crop 64, flip | as 33 | – |
-| 61 | as 33 | as 33, but box-aware CutMix: piece cut around the other image's object, label by the visible share of each object | – |
-| 62 | crop, flip | box-aware ResizeMix on 50% of images, label by the visible share of this image's object | RandAugment |
-| 63 | crop, flip | box-aware CutMix (α = 1.0) on 50% of images, label by the visible share of each object | RandAugment |
+**Accuracy: a tie.** 39 is 0.19 points higher on average, but not on every seed (seed 21: −0.10). Paired t-test over the 3 seeds: t = 1.1, p = 0.38, not significant. **So 39 was kept because it is simpler** (one mixing method instead of two) and used for all models. Box-aware mixing and zoom gave nothing extra.
 
 | Used for | Paper |
 |---|---|
