@@ -1,6 +1,14 @@
 # Robustness Analysis of Standard CNN and Predictive Coding CNN Models for Image Classification under Gaussian and Salt-and-Pepper Noise
 
-## Overview
+| Part | Sections |
+|---|---|
+| [Start](#start) | [Overview](#overview) · [Installation](#installation) · [Data](#data) |
+| [What the thesis uses](#what-the-thesis-uses) | [StandardCNN](#standardcnn) · [HPCCNNRaoV2 (the PC-CNN)](#hpccnnraov2-the-pc-cnn) · [PCCNNEP](#pccnnep-ep-extra-experiment) · [Experiments Chosen](#experiments-chosen) · [Evaluation](#evaluation-to-do-after-training) |
+| [How the choices were made](#how-the-choices-were-made) | [StandardCNN Selection](#standardcnn-selection) · [Model Size and Computation Cost](#model-size-and-computation-cost) · [Augmentation Selection](#augmentation-selection) |
+
+## Start
+
+### Overview
 
 **Problem.** Image classifiers are usually tested on clean images, but real images are often noisy (poor light, low-quality cameras, compression, sensor noise). Noise and other corruptions can make a network wrong, so clean accuracy alone does not show how reliable a model is. A Predictive-Coding CNN (PC-CNN) corrects its features with top-down predictions and bottom-up prediction errors over several steps (iterative inference), which may help with noisy images. But there is little direct comparison of a Standard CNN and a PC-CNN with the same structure, both trained without noise and tested under controlled noise.
 
@@ -10,7 +18,7 @@
 
 **What we do:**
 1. Build two models with the same layers: **StandardCNN** (one feedforward pass) and **HPCCNNRaoV2** (the same CNN + 7 cycles of top-down predictions and bottom-up prediction errors).
-2. Train both on the Tiny ImageNet training images (200 classes) without noise (with augmentation, see Augmentation Selection), with the same settings and 3 seeds each.
+2. Train both on the Tiny ImageNet training images (200 classes) without noise (with augmentation, see Experiments Chosen), with the same settings and 3 seeds each.
 3. Test on the validation images without noise (baseline).
 4. Add Gaussian and salt-and-pepper noise to the validation images at 0.05, 0.1, 0.2, 0.3 and 0.5 (test only, never in training) and test again.
 5. Compare the models: accuracy drop, loss increase, robustness retention, corruption error, calibration, statistical tests over the seeds, and compute cost (see Evaluation).
@@ -19,7 +27,7 @@ Extra experiment: **PCCNNEP**, the same CNN trained with a predictive-coding lea
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
-## Installation
+### Installation
 
 **Needs:** Python 3.10, Git and Git LFS (for the checkpoints). A GPU is optional: the code uses CUDA if available, else Apple MPS, else the CPU.
 
@@ -46,15 +54,15 @@ pip install -r requirements.txt
 PYTHONPATH="$PWD" jupyter lab      # Windows PowerShell: $env:PYTHONPATH = (Get-Location); jupyter lab
 ```
 
-**4. Run an experiment.** Open a notebook in `experiments_in_seeds/` (see the runs table below) and run all cells. Checkpoints and `metrics.csv` are written to `checkpoints/<model>/<run>/`. To continue a stopped run, set `RESUME = True` in the first code cell. Training time per seed: see Model Size and Computation Cost.
+**4. Run an experiment.** Open a notebook in `experiments_in_seeds/` (see the runs table below) and run all cells. Checkpoints and `metrics.csv` are written to `checkpoints/<model>/<run>/`. To continue a stopped run, set `RESUME = True` in the first code cell. Training time per seed: see Model Size and Computation Cost below.
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
-## Data
+### Data
 
 - **Tiny ImageNet** (200 classes, 64×64, 500 train + 50 val images per class), in `data/tiny_imagenet/tiny-imagenet-200` (val images sorted into one folder per class).
 - **Validation = test set.** The test labels of Tiny ImageNet are not public, so the 10,000 validation images are the test set. The model, its training settings, the augmentation and the evaluated checkpoint were also chosen on them (the same for both models). Evaluation uses the best checkpoint (`best_model.pth`, highest validation accuracy), and noise is added only at test.
-- Normalisation: mean/std of the Tiny ImageNet training set (values in Settings, under Experiments Chosen). Validation images: no augmentation. Training augmentation: see Augmentation Selection below.
+- Normalisation: mean/std of the Tiny ImageNet training set (values in Settings, under Experiments Chosen). Validation images: no augmentation. Training augmentation: see the Augmentation pipeline in Experiments Chosen below.
 - Code: `src/dataset/`.
 
 | Used for | Paper |
@@ -63,9 +71,166 @@ PYTHONPATH="$PWD" jupyter lab      # Windows PowerShell: $env:PYTHONPATH = (Get-
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
-## StandardCNN Selection
+## What the thesis uses
 
-How the architecture and the training settings of the Standard CNN were chosen. The final model is described in StandardCNN below.
+### StandardCNN
+
+`src/model/cnn.py`. The baseline, trained with backprop.
+
+Each conv: 3×3, no bias → BatchNorm → LeakyReLU (0.05). Input 3×64×64.
+
+| Block | Layer | Output shape | Receptive field | Parameters |
+|---|---|---|---|---|
+| level1 | conv1 | 32×64×64 | 3 | 928 |
+| | conv2 + max-pool | 64×32×32 | 6 | 18,560 |
+| level2 | conv3 | 64×32×32 | 10 | 36,992 |
+| | conv4 + max-pool | 128×16×16 | 16 | 73,984 |
+| level3 | conv5 | 128×16×16 | 24 | 147,712 |
+| | conv6 + max-pool + Dropout2d 0.15 | 256×8×8 | 36 | 295,424 |
+| level4 | conv7 | 256×8×8 | 52 | 590,336 |
+| | conv8 (dilation 2) + Dropout2d 0.25 | 512×8×8 | 84 | 1,180,672 |
+| head | global average pooling | 512 | whole image | 0 |
+| | dense 512 (BN, LeakyReLU, dropout 0.35) | 512 | | 263,168 |
+| | classifier | 200 | | 102,600 |
+| | **Total** | | | **2,710,376** |
+
+Parameters include the BatchNorm γ, β. Receptive field in input pixels.
+
+- Training: SGD (Nesterov, momentum 0.9, lr 0.05, weight decay 1e-4), cosine schedule, label smoothing 0.1, batch 64, 100 epochs. How the model and these settings were chosen: StandardCNN Selection below.
+
+| Used for | Paper |
+|---|---|
+| 3×3 conv blocks (VGG style) | Simonyan & Zisserman (2015) — https://arxiv.org/abs/1409.1556 |
+| BatchNorm | Ioffe & Szegedy (2015) — https://arxiv.org/abs/1502.03167 |
+| LeakyReLU | Maas et al. (2013), *Rectifier Nonlinearities Improve Neural Network Acoustic Models* — https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf |
+| He (Kaiming) init | He et al. (2015) — https://arxiv.org/abs/1502.01852 |
+| Dilated conv | Yu & Koltun (2016) — https://arxiv.org/abs/1511.07122 |
+| Dropout / Dropout2d | Srivastava et al. (2014) — https://jmlr.org/papers/v15/srivastava14a.html; Tompson et al. (2015) — https://arxiv.org/abs/1411.4280 |
+| Global average pooling | Lin et al. (2014), *Network in Network* — https://arxiv.org/abs/1312.4400 |
+| Label smoothing | Szegedy et al. (2016) — https://arxiv.org/abs/1512.00567 |
+
+<img src="assets/divider.svg" width="100%" height="2" alt="">
+
+### HPCCNNRaoV2 (the PC-CNN)
+
+`src/model/hpc_cnn_rao_v2.py` (class `HPCCNNRaoV2`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
+
+- Cycle 0 = one feedforward pass (= the Standard CNN). Then **7 cycles**, in training and at test:
+  1. **Top-down:** each layer predicts the layer below, p = Wᵀr, and the layer moves toward the prediction.
+  2. **Bottom-up:** the prediction error e = r − p goes up through W and corrects the layer above.
+- Tied weights: the prediction uses the transposed conv of the same layer. Update rates learned per channel.
+- **Per conv, not per block:** each of the 8 convs has its own top-down prediction (`conv_transpose2d` with that conv's weight). Unpool to the max-pool winners only after conv2, 4, 6.
+
+| Block | Conv | Bottom-up (conv) | Top-down (transposed conv, same weight) | Extra: rate a | Extra: rate b |
+|---|---|---|---|---|---|
+| level1 | conv1 | image → r1 (32×64×64) | r1 → image | 32 | 32 |
+| | conv2 + pool | r1 → r2 (64×32×32) | r2 → unpool → r1 | 64 | 64 |
+| level2 | conv3 | r2 → r3 (64×32×32) | r3 → r2 | 64 | 64 |
+| | conv4 + pool | r3 → r4 (128×16×16) | r4 → unpool → r3 | 128 | 128 |
+| level3 | conv5 | r4 → r5 (128×16×16) | r5 → r4 | 128 | 128 |
+| | conv6 + pool | r5 → r6 (256×8×8) | r6 → unpool → r5 | 256 | 256 |
+| level4 | conv7 | r6 → r7 (256×8×8) | r7 → r6 | 256 | 256 |
+| | conv8 (dilation 2) | r7 → r8 (512×8×8) | r8 → r7 | 512 | – (top layer) |
+| | | | | **1,440** | **928** |
+
+**Extra compared with the Standard CNN**
+- **Parameters:** only the rates, 2,368 (a = bottom-up step per channel of r1..r8, b = top-down step per channel of r1..r7). Total 2,712,744.
+- **Top-down predictions:** no new weights (the transposed conv of the same conv).
+- **Not learned (buffers):** λ per layer (top eigenvalue of WᵀW with the BatchNorm scale included, sets the step a/λ) and its 8 power-iteration vectors.
+- **Compute:** 7 inference steps (cycles) after the feedforward pass, in training and at test. Each step = one top-down + one bottom-up sweep through all 8 convs.
+- **Training:** the same loss, optimizer and schedule; backprop runs through all cycles. Hidden dropout uses one mask for all cycles.
+
+| Used for | Paper |
+|---|---|
+| Top-down predictions, bottom-up errors, tied weights | Rao & Ballard (1999), *Predictive coding in the visual cortex*, Nature Neuroscience — https://doi.org/10.1038/4580 |
+| Cycle schedule, update rates, training through the cycles | Wen et al. (2018), *Deep Predictive Coding Network for Object Recognition*, ICML — https://arxiv.org/abs/1802.04762 |
+| Same dropout mask in every cycle | Gal & Ghahramani (2016), *A Theoretically Grounded Application of Dropout in Recurrent Neural Networks* — https://arxiv.org/abs/1512.05287 |
+
+<img src="assets/divider.svg" width="100%" height="2" alt="">
+
+### PCCNNEP (EP, extra experiment)
+
+`src/model/pc_cnn_ep.py` (class `PCCNNEP`). The Standard CNN with its weights learned by centered Equilibrium Propagation: local updates, no backprop. One seed.
+
+- Each batch: free phase (one feedforward pass), then the output is nudged toward the label (+β and −β, β = 0.01). 10 sweeps spread the prediction errors e = state − f(state below) down the layers, and each weight is updated from its local error × input.
+- At test: one feedforward pass, like the Standard CNN.
+- Difference from the PC-CNN: here predictive coding is the learning rule. In the PC-CNN it is the inference (7 cycles at test).
+
+| Used for | Paper |
+|---|---|
+| Predictive coding as learning | Whittington & Bogacz (2017), *Neural Computation* — https://doi.org/10.1162/NECO_a_00949 |
+| Equilibrium Propagation | Scellier & Bengio (2017), *Frontiers in Computational Neuroscience* — https://doi.org/10.3389/fncom.2017.00024 |
+| Centered EP (+β and −β) | Laborieux et al. (2021), *Frontiers in Neuroscience* — https://doi.org/10.3389/fnins.2021.633674 |
+
+<img src="assets/divider.svg" width="100%" height="2" alt="">
+
+### Experiments Chosen
+
+- All 200 classes: notebooks in `experiments_in_seeds/`, checkpoints in `checkpoints/`.
+- 10-class test runs: `archive/_03_experiments_10_classes/` (checkpoints in its `checkpoints/`).
+
+| Model | Experiments | Seeds |
+|---|---|---|
+| StandardCNN | `experiments_in_seeds/cnn/` | 42, 21, 84 |
+| HPCCNNRaoV2 (the PC-CNN) | `experiments_in_seeds/hpc_cnn_rao_v2/` | 42, 21, 84 |
+| PCCNNEP (EP, extra experiment) | `experiments_in_seeds/pc_cnn_ep/` | 42 |
+
+**Settings** (the same for every model; optimizer and learning rate: see StandardCNN above):
+
+| Setting | Value | Why |
+|---|---|---|
+| Seeds | 42, 21, 84 (EP: 42 only) | 3 seeds show how much a result changes by chance, and allow paired tests (CNN seed 42 vs PC-CNN seed 42, and so on). Fixed before training, not tuned. EP has one seed because one run takes about 4 days. |
+| What a seed sets | start weights, order of the training images, augmentation and dropout randomness | With the same seed, every model starts from the same weights and sees the same batches, so the models differ only in the model itself. |
+| Images | all 500 train + 50 val per class, 200 classes (100,000 + 10,000) | The full dataset; the seed does not change which images are used. |
+| Normalisation | mean (R, G, B) = 0.4802, 0.4481, 0.3975; std (R, G, B) = 0.2764, 0.2689, 0.2816 | Computed on the Tiny ImageNet training set (`src/utils/utils.py`). The same for training, validation and test, in every model. |
+| Batch size | 64 | The same for all models. |
+| Epochs | 100 | Cosine learning-rate schedule down to 1e-5 over the 100 epochs. Long enough to converge; 150 epochs cost 1.5× the time for a small gain (see Why 100 epochs, in StandardCNN Selection below). |
+| Data-loader workers | 4 | Fastest in our test (`00_mac_worker_test.ipynb`, 11-core M3 Pro): 0 / 2 / 4 / 6 / 8 workers = 35 / 54 / 66 / 58 / 49 batches per second. |
+| Clean-train check | epoch 1, then every 5 epochs | Accuracy on the training images without augmentation, to watch overfitting. Not every epoch because it costs time. |
+| Checkpoints | `latest_checkpoint.pth` every epoch, `best_model.pth` at the best val accuracy | `latest` stores everything to resume exactly (weights, optimizer, schedule, random states). Evaluation uses `best_model.pth`. |
+
+**Augmentation pipeline** (training only, the same for all models; run 39, how it was chosen: Augmentation Selection below). Code: `src/dataset/resizemix.py` and the "Dataset and transforms" cell of each notebook (`before_mix_tf`, `after_mix_tf`, `test_tf`).
+
+| Step | Setting | Value |
+|---|---|---|
+| 1. Before mixing (`before_mix_tf`) | Crop and flip | RGB → RandomCrop 64, padding 4 (reflect) → horizontal flip, p = 0.5 |
+| 2. Mixing (`ResizeMixDataset`) | ResizeMix on 50% of images (`RESIZEMIX_PROB = 0.50`) | Another random training image is shrunk to τ × 64 px, τ ~ U(0.1, 0.8) (`RESIZEMIX_SCALE`), and pasted at a random spot. The other 50% stay unmixed. |
+| | Label | λ · own label + (1 − λ) · pasted label, λ = 1 − pasted area / image area (≈ 1 − τ²) |
+| 3. After mixing (`after_mix_tf`) | RandAugment | 2 ops, magnitude 5, bilinear |
+| 4. Normalise | Mean and std (R, G, B) | From Settings above |
+| Loss | Mixed cross-entropy | λ · CE(own label) + (1 − λ) · CE(pasted label), label smoothing 0.1 |
+| Validation, test, clean-train check (`test_tf`) | No augmentation | RGB → tensor → normalise (mean/std from Settings). |
+
+<img src="assets/divider.svg" width="100%" height="2" alt="">
+
+### Evaluation (to do, after training)
+
+Every best checkpoint (`best_model.pth`, highest validation accuracy), all seeds, on the 10,000 validation images.
+
+- **Noise, at test only:** Gaussian (standard deviation) and salt-and-pepper (proportion of pixels set to the minimum or maximum) at 0.05, 0.1, 0.2, 0.3 and 0.5. Added in pixel range [0, 1], then clipped, then normalised. The same noisy images for every model.
+- **Clean metrics:** accuracy, loss, confusion matrix, precision, recall, F1.
+- **Robustness metrics:** accuracy drop, loss increase, RRR (noisy / clean accuracy), CE and mCE (Standard CNN as reference), ECE.
+- **Statistics:** paired by seed (CNN 42 vs PC-CNN 42, and so on): paired t-test, Wilcoxon, 95% confidence intervals. With 3 seeds these are weak on their own (Wilcoxon's smallest possible p is 0.25), so also McNemar on the 10,000 images and bootstrap confidence intervals, for each seed pair.
+- **Compute cost:** inference time, GPU memory, FLOPs, training time. Measured only when no training is running.
+- Tables use all seeds (mean ± SD). Figures for one model (confusion matrix, examples) use seed 42. EP has one seed, so it is descriptive only.
+
+| Used for | Paper |
+|---|---|
+| CE, mCE | Hendrycks & Dietterich (2019), *Benchmarking Neural Network Robustness to Common Corruptions and Perturbations* — https://arxiv.org/abs/1903.12261 |
+| ECE | Guo et al. (2017), *On Calibration of Modern Neural Networks* — https://arxiv.org/abs/1706.04599 |
+| McNemar test | McNemar (1947), *Psychometrika* — https://doi.org/10.1007/BF02295996; Dietterich (1998), *Neural Computation* — https://doi.org/10.1162/089976698300017197 |
+| Wilcoxon signed-rank test | Wilcoxon (1945), *Biometrics Bulletin* — https://doi.org/10.2307/3001968 |
+| Bootstrap confidence intervals | Efron (1979), *The Annals of Statistics* — https://doi.org/10.1214/aos/1176344552 |
+
+<img src="assets/divider.svg" width="100%" height="2" alt="">
+
+## How the choices were made
+
+The next three sections explain why the setup above was chosen.
+
+### StandardCNN Selection
+
+How the architecture and the training settings of the Standard CNN were chosen (the final model: StandardCNN above).
 
 All runs: Standard CNN, 200 classes, seed 42, 100 epochs unless noted. Notebooks and checkpoints: `archive/_01_z_cnn/`.
 
@@ -118,8 +283,17 @@ Steps 1–4 used 450 train / 100 val images per class (from run 02 on: the offic
 | Learning rate | 0.05, cosine down to 1e-5 | Not tuned separately. |
 | Weight decay | 1e-4 | 1e-5 was 2.5 lower. 5e-4 was the best on the 8M model (+1.2), but it did not help on the 2.7M model in our test. |
 | Dropout | Dropout2d 0.15 / 0.25 after levels 3 / 4, dense 0.35 | Without block dropout the gap is the largest of these runs (33.2). All dropout levels ended within about 1 point; 0.15 / 0.25 was the base of the later runs (11, 13, 14, 15). |
-| Epochs | 100 | 150 epochs gave +1.8, but take 1.5× the time; for the PC-CNN that is about 114 h instead of 76 h per seed. |
+| Epochs | 100 | Enough to converge with the cosine schedule; 150 gave +1.8 for 1.5× the time (see Why 100 epochs, next). |
 | Batch size | 64 | Not tuned. |
+
+**Why 100 epochs:**
+
+| Reason | Evidence | Meaning |
+|---|---|---|
+| Shorter runs are misleading | Run 15 (weight decay 5e-4) was 10.9 points behind run 10 at epoch 50 (46.39 vs 57.31), but ended 1.2 points higher (67.18 vs 66.03). | Strongly regularised runs gain most at the end, when the cosine learning rate is small. So every run must finish the full schedule before it is judged. |
+| 100 epochs is enough | In the final runs (StandardCNN seeds 42, 21, 84; HPCCNNRaoV2 seeds 42, 21) the last 10 epochs add only +0.4 to +0.9 points (mean of epochs 86–90 → 96–100), and the learning rate ends at 1e-5. | Training has settled by epoch 100. |
+| 150 epochs: small gain, large cost | 8M model: +1.8 points (run 10: 66.03 → run 11: 67.79), for 1.5× the time. | For the PC-CNN that is about 114 h instead of 76 h per seed; all planned runs about 21 days instead of 14. |
+| The same for every model | All models train for 100 epochs with the same schedule. | The comparison is fair. |
 
 | Used for | Paper |
 |---|---|
@@ -131,7 +305,7 @@ Steps 1–4 used 450 train / 100 val images per class (from run 02 on: the offic
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
-## Model Size and Computation Cost
+### Model Size and Computation Cost
 
 **Why a small model (2.7M parameters) and not the 8M model or a higher-parameter model**
 
@@ -167,36 +341,9 @@ The mixing was not the same (8M: 25% clean, 37.5% MixUp, 37.5% CutMix; 2.7M: Res
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
-## Experiments Chosen
+### Augmentation Selection
 
-- All 200 classes: notebooks in `experiments_in_seeds/`, checkpoints in `checkpoints/`.
-- 10-class test runs: `archive/_03_experiments_10_classes/` (checkpoints in its `checkpoints/`).
-
-| Model | Experiments | Seeds |
-|---|---|---|
-| StandardCNN | `experiments_in_seeds/cnn/` | 42, 21, 84 |
-| HPCCNNRaoV2 (the PC-CNN) | `experiments_in_seeds/hpc_cnn_rao_v2/` | 42, 21, 84 |
-| PCCNNEP (EP, extra experiment) | `experiments_in_seeds/pc_cnn_ep/` | 42 |
-
-**Settings** (the same for every model; optimizer and learning rate: see StandardCNN):
-
-| Setting | Value | Why |
-|---|---|---|
-| Seeds | 42, 21, 84 (EP: 42 only) | 3 seeds show how much a result changes by chance, and allow paired tests (CNN seed 42 vs PC-CNN seed 42, and so on). Fixed before training, not tuned. EP has one seed because one run takes about 4 days. |
-| What a seed sets | start weights, order of the training images, augmentation and dropout randomness | With the same seed, every model starts from the same weights and sees the same batches, so the models differ only in the model itself. |
-| Images | all 500 train + 50 val per class, 200 classes (100,000 + 10,000) | The full dataset; the seed does not change which images are used. |
-| Normalisation | mean (R, G, B) = 0.4802, 0.4481, 0.3975; std (R, G, B) = 0.2764, 0.2689, 0.2816 | Computed on the Tiny ImageNet training set (`src/utils/utils.py`). The same for training, validation and test, in every model. |
-| Batch size | 64 | The same for all models. |
-| Epochs | 100 | Cosine learning-rate schedule down to 1e-5 over the 100 epochs. |
-| Data-loader workers | 4 | Fastest in our test (`00_mac_worker_test.ipynb`, 11-core M3 Pro): 0 / 2 / 4 / 6 / 8 workers = 35 / 54 / 66 / 58 / 49 batches per second. |
-| Clean-train check | epoch 1, then every 5 epochs | Accuracy on the training images without augmentation, to watch overfitting. Not every epoch because it costs time. |
-| Checkpoints | `latest_checkpoint.pth` every epoch, `best_model.pth` at the best val accuracy | `latest` stores everything to resume exactly (weights, optimizer, schedule, random states). Evaluation uses `best_model.pth`. |
-
-<img src="assets/divider.svg" width="100%" height="2" alt="">
-
-## Augmentation Selection
-
-Augmentation is used in training only and is the same for all models. Final choice: **run 39, ResizeMix on 50% of images** (steps in **Final pipeline** below).
+How the training augmentation was chosen. Final choice: **run 39, ResizeMix on 50% of images**; its steps are in the Augmentation pipeline, under Experiments Chosen above.
 
 **How it was chosen.** The Standard CNN overfits: even with MixUp + CutMix (run 33) it gets 84% on the training images (without augmentation) but 64% on validation, a 20-point gap. So we compared mixing augmentations as regularisers. Most errors were on small or off-centre objects, so some runs target those. All runs: the Standard CNN, 100 epochs, seed 42; columns as in StandardCNN Selection. Notebooks and checkpoints: `archive/_01_z_cnn/_05_cnn/`.
 
@@ -239,18 +386,6 @@ Aug. train is below val because mixed images are harder (two images, split label
   ```
 - **So 39 was kept because it is simpler** (one mixing method instead of two) and used for all models. Box-aware mixing and zoom gave nothing extra.
 
-**Final pipeline (run 39, used for all models).** Code: `src/dataset/resizemix.py` and the "Dataset and transforms" cell of each notebook (`before_mix_tf`, `after_mix_tf`, `test_tf`).
-
-| Step | Setting | Value |
-|---|---|---|
-| 1. Before mixing (`before_mix_tf`) | Crop and flip | RGB → RandomCrop 64, padding 4 (reflect) → horizontal flip, p = 0.5 |
-| 2. Mixing (`ResizeMixDataset`) | ResizeMix on 50% of images (`RESIZEMIX_PROB = 0.50`) | Another random training image is shrunk to τ × 64 px, τ ~ U(0.1, 0.8) (`RESIZEMIX_SCALE`), and pasted at a random spot. The other 50% stay unmixed. |
-| | Label | λ · own label + (1 − λ) · pasted label, λ = 1 − pasted area / image area (≈ 1 − τ²) |
-| 3. After mixing (`after_mix_tf`) | RandAugment | 2 ops, magnitude 5, bilinear |
-| 4. Normalise | Mean and std (R, G, B) | Used from Settings (see Experiments Chosen) |
-| Loss | Mixed cross-entropy | λ · CE(own label) + (1 − λ) · CE(pasted label), label smoothing 0.1 |
-| Validation, test, clean-train check (`test_tf`) | No augmentation | RGB → tensor → normalise (mean/std from Settings). |
-
 **Settings of every run.** What each run did before, during and after mixing.
 - The same in all runs: horizontal flip (p = 0.5), RandAugment (2 ops, magnitude 5), normalisation (mean/std from Settings), label smoothing 0.1, clean validation images.
 - Crop = RandomCrop 64, padding 4 (reflect).
@@ -273,116 +408,3 @@ Aug. train is below val because mixed images are harder (two images, split label
 | ResizeMix | Qin et al. (2020), *ResizeMix: Mixing Data with Preserved Object Information and True Labels* — https://arxiv.org/abs/2012.11101 |
 | RandAugment | Cubuk et al. (2020), *RandAugment* — https://arxiv.org/abs/1909.13719 |
 | Zoom (scale jittering) | Simonyan & Zisserman (2015) — https://arxiv.org/abs/1409.1556 |
-
-<img src="assets/divider.svg" width="100%" height="2" alt="">
-
-## StandardCNN
-
-`src/model/cnn.py`. The baseline, trained with backprop.
-
-Each conv: 3×3, no bias → BatchNorm → LeakyReLU (0.05). Input 3×64×64.
-
-| Block | Layer | Output shape | Receptive field | Parameters |
-|---|---|---|---|---|
-| level1 | conv1 | 32×64×64 | 3 | 928 |
-| | conv2 + max-pool | 64×32×32 | 6 | 18,560 |
-| level2 | conv3 | 64×32×32 | 10 | 36,992 |
-| | conv4 + max-pool | 128×16×16 | 16 | 73,984 |
-| level3 | conv5 | 128×16×16 | 24 | 147,712 |
-| | conv6 + max-pool + Dropout2d 0.15 | 256×8×8 | 36 | 295,424 |
-| level4 | conv7 | 256×8×8 | 52 | 590,336 |
-| | conv8 (dilation 2) + Dropout2d 0.25 | 512×8×8 | 84 | 1,180,672 |
-| head | global average pooling | 512 | whole image | 0 |
-| | dense 512 (BN, LeakyReLU, dropout 0.35) | 512 | | 263,168 |
-| | classifier | 200 | | 102,600 |
-| | **Total** | | | **2,710,376** |
-
-Parameters include the BatchNorm γ, β. Receptive field in input pixels.
-
-- Training: SGD (Nesterov, momentum 0.9, lr 0.05, weight decay 1e-4), cosine schedule, label smoothing 0.1, batch 64, 100 epochs.
-
-| Used for | Paper |
-|---|---|
-| 3×3 conv blocks (VGG style) | Simonyan & Zisserman (2015) — https://arxiv.org/abs/1409.1556 |
-| BatchNorm | Ioffe & Szegedy (2015) — https://arxiv.org/abs/1502.03167 |
-| LeakyReLU | Maas et al. (2013), *Rectifier Nonlinearities Improve Neural Network Acoustic Models* — https://ai.stanford.edu/~amaas/papers/relu_hybrid_icml2013_final.pdf |
-| He (Kaiming) init | He et al. (2015) — https://arxiv.org/abs/1502.01852 |
-| Dilated conv | Yu & Koltun (2016) — https://arxiv.org/abs/1511.07122 |
-| Dropout / Dropout2d | Srivastava et al. (2014) — https://jmlr.org/papers/v15/srivastava14a.html; Tompson et al. (2015) — https://arxiv.org/abs/1411.4280 |
-| Global average pooling | Lin et al. (2014), *Network in Network* — https://arxiv.org/abs/1312.4400 |
-| Label smoothing | Szegedy et al. (2016) — https://arxiv.org/abs/1512.00567 |
-
-<img src="assets/divider.svg" width="100%" height="2" alt="">
-
-## HPCCNNRaoV2 (the PC-CNN)
-
-`src/model/hpc_cnn_rao_v2.py` (class `HPCCNNRaoV2`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
-
-- Cycle 0 = one feedforward pass (= the Standard CNN). Then **7 cycles**, in training and at test:
-  1. **Top-down:** each layer predicts the layer below, p = Wᵀr, and the layer moves toward the prediction.
-  2. **Bottom-up:** the prediction error e = r − p goes up through W and corrects the layer above.
-- Tied weights: the prediction uses the transposed conv of the same layer. Update rates learned per channel.
-- **Per conv, not per block:** each of the 8 convs has its own top-down prediction (`conv_transpose2d` with that conv's weight). Unpool to the max-pool winners only after conv2, 4, 6.
-
-| Block | Conv | Bottom-up (conv) | Top-down (transposed conv, same weight) | Extra: rate a | Extra: rate b |
-|---|---|---|---|---|---|
-| level1 | conv1 | image → r1 (32×64×64) | r1 → image | 32 | 32 |
-| | conv2 + pool | r1 → r2 (64×32×32) | r2 → unpool → r1 | 64 | 64 |
-| level2 | conv3 | r2 → r3 (64×32×32) | r3 → r2 | 64 | 64 |
-| | conv4 + pool | r3 → r4 (128×16×16) | r4 → unpool → r3 | 128 | 128 |
-| level3 | conv5 | r4 → r5 (128×16×16) | r5 → r4 | 128 | 128 |
-| | conv6 + pool | r5 → r6 (256×8×8) | r6 → unpool → r5 | 256 | 256 |
-| level4 | conv7 | r6 → r7 (256×8×8) | r7 → r6 | 256 | 256 |
-| | conv8 (dilation 2) | r7 → r8 (512×8×8) | r8 → r7 | 512 | – (top layer) |
-| | | | | **1,440** | **928** |
-
-**Extra compared with the Standard CNN**
-- **Parameters:** only the rates, 2,368 (a = bottom-up step per channel of r1..r8, b = top-down step per channel of r1..r7). Total 2,712,744.
-- **Top-down predictions:** no new weights (the transposed conv of the same conv).
-- **Not learned (buffers):** λ per layer (top eigenvalue of WᵀW with the BatchNorm scale included, sets the step a/λ) and its 8 power-iteration vectors.
-- **Compute:** 7 inference steps (cycles) after the feedforward pass, in training and at test. Each step = one top-down + one bottom-up sweep through all 8 convs.
-- **Training:** the same loss, optimizer and schedule; backprop runs through all cycles. Hidden dropout uses one mask for all cycles.
-
-| Used for | Paper |
-|---|---|
-| Top-down predictions, bottom-up errors, tied weights | Rao & Ballard (1999), *Predictive coding in the visual cortex*, Nature Neuroscience — https://doi.org/10.1038/4580 |
-| Cycle schedule, update rates, training through the cycles | Wen et al. (2018), *Deep Predictive Coding Network for Object Recognition*, ICML — https://arxiv.org/abs/1802.04762 |
-| Same dropout mask in every cycle | Gal & Ghahramani (2016), *A Theoretically Grounded Application of Dropout in Recurrent Neural Networks* — https://arxiv.org/abs/1512.05287 |
-
-<img src="assets/divider.svg" width="100%" height="2" alt="">
-
-## PCCNNEP (EP, extra experiment)
-
-`src/model/pc_cnn_ep.py` (class `PCCNNEP`). The Standard CNN with its weights learned by centered Equilibrium Propagation: local updates, no backprop. One seed.
-
-- Each batch: free phase (one feedforward pass), then the output is nudged toward the label (+β and −β, β = 0.01). 10 sweeps spread the prediction errors e = state − f(state below) down the layers, and each weight is updated from its local error × input.
-- At test: one feedforward pass, like the Standard CNN.
-- Difference from the PC-CNN: here predictive coding is the learning rule. In the PC-CNN it is the inference (7 cycles at test).
-
-| Used for | Paper |
-|---|---|
-| Predictive coding as learning | Whittington & Bogacz (2017), *Neural Computation* — https://doi.org/10.1162/NECO_a_00949 |
-| Equilibrium Propagation | Scellier & Bengio (2017), *Frontiers in Computational Neuroscience* — https://doi.org/10.3389/fncom.2017.00024 |
-| Centered EP (+β and −β) | Laborieux et al. (2021), *Frontiers in Neuroscience* — https://doi.org/10.3389/fnins.2021.633674 |
-
-<img src="assets/divider.svg" width="100%" height="2" alt="">
-
-## Evaluation (to do, after training)
-
-Every best checkpoint (`best_model.pth`, highest validation accuracy), all seeds, on the 10,000 validation images.
-
-- **Noise, at test only:** Gaussian (standard deviation) and salt-and-pepper (proportion of pixels set to the minimum or maximum) at 0.05, 0.1, 0.2, 0.3 and 0.5. Added in pixel range [0, 1], then clipped, then normalised. The same noisy images for every model.
-- **Clean metrics:** accuracy, loss, confusion matrix, precision, recall, F1.
-- **Robustness metrics:** accuracy drop, loss increase, RRR (noisy / clean accuracy), CE and mCE (Standard CNN as reference), ECE.
-- **Statistics:** paired by seed (CNN 42 vs PC-CNN 42, and so on): paired t-test, Wilcoxon, 95% confidence intervals. With 3 seeds these are weak on their own (Wilcoxon's smallest possible p is 0.25), so also McNemar on the 10,000 images and bootstrap confidence intervals, for each seed pair.
-- **Compute cost:** inference time, GPU memory, FLOPs, training time. Measured only when no training is running.
-- Tables use all seeds (mean ± SD). Figures for one model (confusion matrix, examples) use seed 42. EP has one seed, so it is descriptive only.
-
-| Used for | Paper |
-|---|---|
-| CE, mCE | Hendrycks & Dietterich (2019), *Benchmarking Neural Network Robustness to Common Corruptions and Perturbations* — https://arxiv.org/abs/1903.12261 |
-| ECE | Guo et al. (2017), *On Calibration of Modern Neural Networks* — https://arxiv.org/abs/1706.04599 |
-| McNemar test | McNemar (1947), *Psychometrika* — https://doi.org/10.1007/BF02295996; Dietterich (1998), *Neural Computation* — https://doi.org/10.1162/089976698300017197 |
-| Wilcoxon signed-rank test | Wilcoxon (1945), *Biometrics Bulletin* — https://doi.org/10.2307/3001968 |
-| Bootstrap confidence intervals | Efron (1979), *The Annals of Statistics* — https://doi.org/10.1214/aos/1176344552 |
-
