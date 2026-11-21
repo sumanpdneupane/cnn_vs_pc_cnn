@@ -1,10 +1,18 @@
 # Robustness Analysis of Standard CNN and Predictive Coding CNN Models for Image Classification under Gaussian and Salt-and-Pepper Noise
 
-| Part | Sections |
-|---|---|
-| [Start](#start) | [Overview](#overview) · [Installation](#installation) · [Data](#data) |
-| [What the thesis uses](#what-the-thesis-uses) | [StandardCNN](#standardcnn) · [HPCCNNRaoV2 (the PC-CNN)](#hpccnnraov2-the-pc-cnn) · [PCCNNEP](#pccnnep-ep-extra-experiment) · [Experiments Chosen](#experiments-chosen) · [Evaluation](#evaluation-to-do-after-training) |
-| [How the choices were made](#how-the-choices-were-made) | [StandardCNN Selection](#standardcnn-selection) · [Model Size and Computation Cost](#model-size-and-computation-cost) · [Augmentation Selection](#augmentation-selection) |
+| Part | Section | What it covers |
+|---|---|---|
+| [**Start**](#start) | [Overview](#overview) | Problem, research question, hypothesis, what we do |
+| | [Installation](#installation) | Clone, install, run a notebook |
+| | [Data](#data) | Tiny ImageNet; validation images = test set |
+| [**What the thesis uses**](#what-the-thesis-uses) | [StandardCNN](#standardcnn) | The baseline CNN |
+| | [HPCCNNRaoV2 (the PC-CNN)](#hpccnnraov2-the-pc-cnn) | The predictive-coding CNN |
+| | [PCCNNEP](#pccnnep-ep-extra-experiment) | Extra experiment: the CNN trained with Equilibrium Propagation |
+| | [Experiments Chosen](#experiments-chosen) | Runs, seeds, settings, augmentation pipeline |
+| | [Evaluation](#evaluation-to-do-after-training) | Noise levels, metrics, statistics |
+| [**How the choices were made**](#how-the-choices-were-made) | [StandardCNN Selection](#standardcnn-selection) | Architecture and training settings |
+| | [Model Size and Computation Cost](#model-size-and-computation-cost) | Why 2.7M and not 8M parameters or a higher-parameter model |
+| | [Augmentation Selection](#augmentation-selection) | Why ResizeMix on 50% of images |
 
 ## Start
 
@@ -315,10 +323,10 @@ An earlier Standard CNN had 8.0M parameters (10 convs, step 4 in StandardCNN Sel
 
 | Model | Parameters | Compute per image (one forward pass) | Val (%) | Aug. train (%) | Clean train (%) | Gap (pp) |
 |---|---|---|---|---|---|---|
-| Earlier CNN (10 convs) | 8,003,720 | 1,140M multiply-adds | **66.03** | **64.84** | **92.45** | 26.39 |
-| StandardCNN (8 convs, used) | **2,710,376** | **419M multiply-adds** | 64.07 | 56.13 | 83.27 | **19.12** |
+| Earlier CNN (10 convs) | 8,003,720 | 1,140M MACs (≈ 2,280M FLOPs) | **66.03** | **64.84** | **92.45** | 26.39 |
+| StandardCNN (8 convs, used) | **2,710,376** | **419M MACs (≈ 838M FLOPs)** | 64.07 | 56.13 | 83.27 | **19.12** |
 
-The mixing was not the same (8M: 25% clean, 37.5% MixUp, 37.5% CutMix; 2.7M: ResizeMix on 50% of images), so the differences are approximate. The 8M row is run 10 of the training-settings table in StandardCNN Selection above (same dropout, weight decay, learning rate and optimizer as our model); the best 8M run (weight decay 5e-4) reached 67.18.
+Compute: 1 MAC = one multiply-add = 2 FLOPs; conv and linear layers only, for one 64×64 image. The mixing was not the same (8M: 25% clean, 37.5% MixUp, 37.5% CutMix; 2.7M: ResizeMix on 50% of images), so the differences are approximate. The 8M row is run 10 of the training-settings table in StandardCNN Selection above (same dropout, weight decay, learning rate and optimizer as our model); the best 8M run (weight decay 5e-4) reached 67.18.
 
 **Training time** on a MacBook Pro (Apple M3 Pro: 11-core CPU, 14-core GPU via MPS, 18 GB memory), one run at a time. 8M estimated as 2.7× the time, because it needs 2.7× the compute:
 
