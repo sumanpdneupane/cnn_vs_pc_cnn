@@ -76,7 +76,7 @@ PYTHONPATH="$PWD" jupyter lab      # Windows PowerShell: $env:PYTHONPATH = (Get-
 
 | Used for | Paper |
 |---|---|
-| Dataset | Le & Yang (2015), *Tiny ImageNet Visual Recognition Challenge* — http://cs231n.stanford.edu/reports/2015/pdfs/yle_project.pdf |
+| Dataset | Le & Yang (2015), *Tiny ImageNet Visual Recognition Challenge* — https://cs231n.stanford.edu/reports/2015/pdfs/yle_project.pdf |
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
