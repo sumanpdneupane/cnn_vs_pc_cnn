@@ -4,7 +4,7 @@ from torch import nn
 
 from src.model.cnn import StandardCNN
 
-# HPCCNNRaoV2: the Standard CNN + predictive coding at every conv layer.
+# PCCNN: the Standard CNN + predictive coding at every conv layer.
 # Rao & Ballard (1999), https://doi.org/10.1038/4580: tied weights, top-down predictions, bottom-up errors.
 # Wen et al. (2018), https://arxiv.org/abs/1802.04762: cycle schedule, learned rates, backprop through the cycles.
 # Gal & Ghahramani (2016), https://arxiv.org/abs/1512.05287: the same dropout mask in every cycle.
@@ -63,7 +63,7 @@ class ConvLayer:
         return F.conv_transpose2d(x, self.conv.weight, None, padding=self.conv.padding, dilation=self.conv.dilation)
 
 
-class HPCCNNRaoV2(StandardCNN):
+class PCCNN(StandardCNN):
     training_method = 'bp'
     top_down_inference = True  # False: one-pass ablation at test
     slope = 0.05  # LeakyReLU slope (phi), as in the Standard CNN

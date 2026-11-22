@@ -6,8 +6,7 @@
 | | [Installation](#installation) | Clone, install, run a notebook |
 | | [Data](#data) | Tiny ImageNet; validation images = test set |
 | [**What the thesis uses**](#what-the-thesis-uses) | [StandardCNN](#standardcnn) | The baseline CNN |
-| | [HPCCNNRaoV2 (the PC-CNN)](#hpccnnraov2-the-pc-cnn) | The predictive-coding CNN |
-| | [PCCNNEP](#pccnnep-ep-extra-experiment) | Extra experiment: the CNN trained with Equilibrium Propagation |
+| | [PCCNN](#pccnn) | The predictive-coding CNN |
 | | [Experiments Chosen](#experiments-chosen) | Runs, seeds, settings, augmentation pipeline |
 | | [Evaluation](#evaluation-to-do-after-training) | Noise levels, metrics, statistics |
 | [**How the choices were made**](#how-the-choices-were-made) | [StandardCNN Selection](#standardcnn-selection) | Architecture and training settings |
@@ -25,13 +24,11 @@
 **Hypothesis.** Both kinds of noise will lower the results of both models. The PC-CNN may behave differently from the Standard CNN under noise, because it uses prediction-error correction and iterative inference.
 
 **What we do:**
-1. Build two models with the same layers: **StandardCNN** (one feedforward pass) and **HPCCNNRaoV2** (the same CNN + 7 cycles of top-down predictions and bottom-up prediction errors).
+1. Build two models with the same layers: **StandardCNN** (one feedforward pass) and **PCCNN** (the same CNN + 7 cycles of top-down predictions and bottom-up prediction errors).
 2. Train both on the Tiny ImageNet training images (200 classes) without noise (with augmentation, see Experiments Chosen), with the same settings and 3 seeds each.
 3. Test on the validation images without noise (baseline).
 4. Add Gaussian and salt-and-pepper noise to the validation images at 0.05, 0.1, 0.2, 0.3 and 0.5 (test only, never in training) and test again.
 5. Compare the models: accuracy drop, loss increase, robustness retention, corruption error, calibration, statistical tests over the seeds, and compute cost (see Evaluation).
-
-Extra experiment: **PCCNNEP**, the same CNN trained with a predictive-coding learning rule (Equilibrium Propagation) instead of backprop, one seed.
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
@@ -119,9 +116,9 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
-### HPCCNNRaoV2 (the PC-CNN)
+### PCCNN
 
-`src/model/hpc_cnn_rao_v2.py` (class `HPCCNNRaoV2`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
+`src/model/pc_cnn.py` (class `PCCNN`). The Standard CNN (same layers, start weights, dropout and training) plus predictive coding at every conv layer.
 
 - Cycle 0 = one feedforward pass (= the Standard CNN). Then **7 cycles**, in training and at test:
   1. **Top-down:** each layer predicts the layer below, p = Wᵀr, and the layer moves toward the prediction.
@@ -154,22 +151,6 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 
 <img src="assets/divider.svg" width="100%" height="2" alt="">
 
-### PCCNNEP (EP, extra experiment)
-
-`src/model/pc_cnn_ep.py` (class `PCCNNEP`). The Standard CNN with its weights learned by centered Equilibrium Propagation: local updates, no backprop. One seed.
-
-- Each batch: free phase (one feedforward pass), then the output is nudged toward the label (+β and −β, β = 0.01). 10 sweeps spread the prediction errors e = state − f(state below) down the layers, and each weight is updated from its local error × input.
-- At test: one feedforward pass, like the Standard CNN.
-- Difference from the PC-CNN: here predictive coding is the learning rule. In the PC-CNN it is the inference (7 cycles at test).
-
-| Used for | Paper |
-|---|---|
-| Predictive coding as learning | Whittington & Bogacz (2017), *Neural Computation* — https://doi.org/10.1162/NECO_a_00949 |
-| Equilibrium Propagation | Scellier & Bengio (2017), *Frontiers in Computational Neuroscience* — https://doi.org/10.3389/fncom.2017.00024 |
-| Centered EP (+β and −β) | Laborieux et al. (2021), *Frontiers in Neuroscience* — https://doi.org/10.3389/fnins.2021.633674 |
-
-<img src="assets/divider.svg" width="100%" height="2" alt="">
-
 ### Experiments Chosen
 
 - All 200 classes: notebooks in `experiments_in_seeds/`, checkpoints in `checkpoints/`.
@@ -178,14 +159,13 @@ Parameters include the BatchNorm γ, β. Receptive field in input pixels.
 | Model | Experiments | Seeds |
 |---|---|---|
 | StandardCNN | `experiments_in_seeds/cnn/` | 42, 21, 84 |
-| HPCCNNRaoV2 (the PC-CNN) | `experiments_in_seeds/hpc_cnn_rao_v2/` | 42, 21, 84 |
-| PCCNNEP (EP, extra experiment) | `experiments_in_seeds/pc_cnn_ep/` | 42 |
+| PCCNN | `experiments_in_seeds/pc_cnn/` | 42, 21, 84 |
 
 **Settings** (the same for every model; optimizer and learning rate: see StandardCNN above):
 
 | Setting | Value | Why |
 |---|---|---|
-| Seeds | 42, 21, 84 (EP: 42 only) | 3 seeds show how much a result changes by chance, and allow paired tests (CNN seed 42 vs PC-CNN seed 42, and so on). Fixed before training, not tuned. EP has one seed because one run takes about 4 days. |
+| Seeds | 42, 21, 84 | 3 seeds show how much a result changes by chance, and allow paired tests (CNN seed 42 vs PC-CNN seed 42, and so on). Fixed before training, not tuned. |
 | What a seed sets | start weights, order of the training images, augmentation and dropout randomness | With the same seed, every model starts from the same weights and sees the same batches, so the models differ only in the model itself. |
 | Images | all 500 train + 50 val per class, 200 classes (100,000 + 10,000) | The full dataset; the seed does not change which images are used. |
 | Normalisation | mean (R, G, B) = 0.4802, 0.4481, 0.3975; std (R, G, B) = 0.2764, 0.2689, 0.2816 | Computed on the Tiny ImageNet training set (`src/utils/utils.py`). The same for training, validation and test, in every model. |
@@ -218,7 +198,7 @@ Every best checkpoint (`best_model.pth`, highest validation accuracy), all seeds
 - **Robustness metrics:** accuracy drop, loss increase, RRR (noisy / clean accuracy), CE and mCE (Standard CNN as reference), ECE.
 - **Statistics:** paired by seed (CNN 42 vs PC-CNN 42, and so on): paired t-test, Wilcoxon, 95% confidence intervals. With 3 seeds these are weak on their own (Wilcoxon's smallest possible p is 0.25), so also McNemar on the 10,000 images and bootstrap confidence intervals, for each seed pair.
 - **Compute cost:** inference time, GPU memory, FLOPs, training time. Measured only when no training is running.
-- Tables use all seeds (mean ± SD). Figures for one model (confusion matrix, examples) use seed 42. EP has one seed, so it is descriptive only.
+- Tables use all seeds (mean ± SD). Figures for one model (confusion matrix, examples) use seed 42.
 
 | Used for | Paper |
 |---|---|
@@ -318,15 +298,14 @@ Compute: 1 MAC = one multiply-add = 2 FLOPs; conv and linear layers only, for on
 | Model | Per seed (2.7M, used) | All planned runs, 2.7M (used) | All planned runs, 8M (estimated) |
 |---|---|---|---|
 | StandardCNN, 3 seeds | about 3.7 h | ≈ 0.5 days | about 1.3 days |
-| HPCCNNRaoV2 (the PC-CNN), 3 seeds | about 76 h (3.2 days) | ≈ 9.5 days | about 26 days |
-| PCCNNEP (EP), 1 seed | about 4 days (estimated) | about 4 days | about 11 days |
-| **Total** | | **about 14 days** | **about 38 days** |
+| PCCNN, 3 seeds | about 76 h (3.2 days) | ≈ 9.5 days | about 26 days |
+| **Total** | | **about 10 days** | **about 27 days** |
 
 **Why the 2.7M model:**
 
 | Reason | Explanation |
 |---|---|
-| Training time | The PC-CNN runs 7 extra cycles through every conv and EP runs many inference steps per batch, so both get slower as the CNN gets bigger. About 38 days of training was too long before the thesis deadline; about 14 days fits. |
+| Training time | The PC-CNN runs 7 extra cycles through every conv, so it gets slower as the CNN gets bigger. About 27 days of training was too long before the thesis deadline; about 10 days fits. |
 | Less overfitting | The 8M model is 2 points better on validation but overfits more: gap 26.39 vs 19.12 (20.83 even with weight decay 5e-4, run 15), although it mixed more (75% of batches vs 50% of images). |
 | The question is relative | The thesis asks how the CNN and the PC-CNN differ in robustness to noise (which one is more robust), with the same backbone. That comparison is fair at any size, so the 8M model's 2 extra points of clean accuracy are not needed. |
 
